@@ -12,6 +12,7 @@ final class MicrophoneMonitor {
 
     private let listener: Listener
     private let running = [PropertyAddress(kAudioDevicePropertyDeviceIsRunningSomewhere)]
+    private let inputDevices = PropertyAddress(kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeInput)
     private var observed: [AudioObjectID: AudioHardwareDevice] = [:]
 
     init(onChange: @escaping @MainActor @Sendable () -> Void) {
@@ -41,9 +42,17 @@ final class MicrophoneMonitor {
                 }
             }
         }
-        // Device changes tell us when to check. Per-process input activity distinguishes
-        // microphone use from output playing through the same headset.
         let processes = (try? AudioHardwareSystem.shared.processes) ?? []
-        return processes.contains { (try? $0.isRunningInput) == true }
+        return processes.contains(where: usesRunningMicrophone)
+    }
+
+    private func usesRunningMicrophone(_ process: AudioHardwareProcess) -> Bool {
+        // CoreSpeech can still report running input after dictation releases the mic.
+        // Check the devices used for input so headset playback alone can't keep the timer paused.
+        guard (try? process.isRunningInput) == true,
+              let data = try? process.propertyData(address: inputDevices) else { return false }
+        var ids = [AudioObjectID](repeating: 0, count: data.count / MemoryLayout<AudioObjectID>.stride)
+        _ = ids.withUnsafeMutableBytes { data.copyBytes(to: $0) }
+        return ids.contains { (try? AudioHardwareDevice(id: $0).isRunningInAProcess) == true }
     }
 }
