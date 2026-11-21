@@ -128,7 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.toolTip = "bradipo · \(description)"
             button.setAccessibilityLabel("bradipo, \(description), \(time)")
         }
-        pauseStatus.isHidden = reason == nil
+        pauseStatus.isHidden = reason == nil || clock.pauseReason == .manual
         pauseStatus.title = reason ?? ""
         takeBreak.isEnabled = !resting && (clock.pauseReason == nil || clock.pauseReason == .idle)
         pause.isEnabled = !resting
