@@ -1,7 +1,6 @@
 import AppKit
 import AVFoundation
 import BradipoCore
-import CoreAudio
 import CoreGraphics
 
 @MainActor
@@ -15,6 +14,7 @@ final class ActivityMonitor {
     )
     private let center = NSWorkspace.shared.notificationCenter
     private var observers: [NSObjectProtocol] = []
+    private var microphone: MicrophoneMonitor?
     private var systemAsleep = false
     private var screensAsleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
     private var sessionInactive = false
@@ -37,22 +37,20 @@ final class ActivityMonitor {
     }
 
     func sample(detectMeetings: Bool) -> ActivityState {
+        if detectMeetings && microphone == nil {
+            microphone = MicrophoneMonitor { [weak self] in self?.onChange?() }
+        } else if !detectMeetings {
+            microphone = nil
+        }
         if systemAsleep || screensAsleep || sessionInactive { return .unavailable }
-        if detectMeetings && isMeetingInProgress { return .meeting }
+        if let microphone, microphone.isInUse || cameras.devices.contains(where: \.isInUseByAnotherApplication) {
+            return .meeting
+        }
 
         // Swift does not import the C macro kCGAnyInputEventType.
         let anyInput = CGEventType(rawValue: UInt32.max)!
         let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyInput)
         return idle >= ActivityState.idleThreshold ? .idle(seconds: idle) : .active
-    }
-
-    private var isMeetingInProgress: Bool {
-        if cameras.devices.contains(where: \.isInUseByAnotherApplication) { return true }
-
-        // Check input streams specifically. Music played through a headset with a
-        // built-in microphone should never pause the timer.
-        let processes = (try? AudioHardwareSystem.shared.processes) ?? []
-        return processes.contains { (try? $0.isRunningInput) == true }
     }
 
     private func observe(

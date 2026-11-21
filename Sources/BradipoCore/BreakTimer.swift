@@ -39,6 +39,7 @@ public struct BreakTimer: Sendable {
     public private(set) var phase: BreakPhase = .working
     public private(set) var isManuallyPaused = false
     public var remainingSeconds: Int { Int(ceil(remaining)) }
+    public var timeUntilNextDisplayedSecond: TimeInterval { remaining - Double(remainingSeconds - 1) }
     public var pauseReason: PauseReason? {
         guard phase == .working else { return nil }
         return isManuallyPaused ? .manual : activity.pauseReason
