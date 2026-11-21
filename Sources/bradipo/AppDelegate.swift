@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let defaults = UserDefaults.standard
     private var workSeconds: Int
     private var breakSeconds: Int
-    private var pauseDuringMeetings: Bool { defaults.bool(forKey: "pauseDuringMeetings") }
+    private var deferBreaksDuringMeetings: Bool { defaults.bool(forKey: "pauseDuringMeetings") }
     private var clock: BreakTimer
     private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
@@ -72,9 +72,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addDurations(title: "Break length", seconds: [20, 30, 60, 120, 300],
                      current: breakSeconds, action: #selector(changeBreak))
         menu.addItem(.separator())
-        meetingItem.title = "Pause During Meetings"
+        meetingItem.title = "Defer Breaks During Meetings"
         meetingItem.target = self
-        meetingItem.action = #selector(toggleMeetingPause)
+        meetingItem.action = #selector(toggleMeetingDeferral)
         menu.addItem(meetingItem)
         menu.addItem(login.menuItem)
         menu.addItem(.separator())
@@ -85,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
-        meetingItem.state = pauseDuringMeetings ? .on : .off
+        meetingItem.state = deferBreaksDuringMeetings ? .on : .off
         login.refresh()
     }
 
@@ -127,7 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func tick() {
-        let state = activity.sample(detectMeetings: pauseDuringMeetings)
+        let state = activity.sample(detectMeetings: deferBreaksDuringMeetings)
         clock.tick(at: now, activity: state)
         render()
     }
@@ -138,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let resting = clock.phase == .resting
         let reason: String? = switch clock.pauseReason {
         case .manual: "Reminders paused"
-        case .meeting: "Paused · Mic or camera in use"
+        case .meeting: "Break due · Mic or camera in use"
         case .idle: "Paused · Mac is idle"
         case .unavailable: "Paused · Mac is away"
         case nil: nil
@@ -153,7 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pauseStatus.title = reason ?? ""
         takeBreak.title = resting ? "Stop break" : "Take a Break"
         takeBreak.action = resting ? #selector(restartTimer) : #selector(startBreak)
-        takeBreak.isEnabled = resting || clock.pauseReason == nil || clock.pauseReason == .idle
+        takeBreak.isEnabled = resting || clock.canStartBreak
         pause.isEnabled = !resting
         pause.title = clock.isManuallyPaused ? "Resume Reminders" : "Pause Reminders"
         if resting {
@@ -163,7 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // A headset playing output can stay running when its input stops, so there
-        // may be no device notification. Recheck more often during a meeting pause.
+        // may be no device notification. Recheck more often while a break is due.
         let delay: TimeInterval = switch clock.pauseReason {
         case .meeting: 0.25
         case nil: clock.timeUntilNextDisplayedSecond
@@ -177,7 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func startBreak() {
-        clock.tick(at: now, activity: activity.sample(detectMeetings: pauseDuringMeetings))
+        clock.tick(at: now, activity: activity.sample(detectMeetings: deferBreaksDuringMeetings))
         clock.startBreak(at: now)
         render()
     }
@@ -187,9 +187,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         tick()
     }
 
-    @objc private func toggleMeetingPause() {
-        defaults.set(!pauseDuringMeetings, forKey: "pauseDuringMeetings")
-        meetingItem.state = pauseDuringMeetings ? .on : .off
+    @objc private func toggleMeetingDeferral() {
+        defaults.set(!deferBreaksDuringMeetings, forKey: "pauseDuringMeetings")
+        meetingItem.state = deferBreaksDuringMeetings ? .on : .off
         tick()
     }
 
