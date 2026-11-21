@@ -31,9 +31,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem.button?.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         buildMenu()
-        statusItem.menu = menu
+        if let button = statusItem.button {
+            button.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+            button.target = self
+            button.action = #selector(openMenu(_:))
+            button.sendAction(on: [.leftMouseDown, .rightMouseDown])
+        }
         activity.onChange = { [weak self] in self?.tick() }
         tick()
         // Common modes keep the menu-bar clock live while the menu is tracking.
@@ -87,9 +91,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         quit.target = NSApp
     }
 
-    func menuWillOpen(_ menu: NSMenu) {
+    func menuNeedsUpdate(_ menu: NSMenu) {
         meetingItem.state = pauseDuringMeetings ? .on : .off
         login.refresh()
+    }
+
+    @objc private func openMenu(_ button: NSStatusBarButton) {
+        guard let window = button.window else { return }
+        let frame = button.convert(button.bounds, to: nil)
+        let leadingX = NSApp.userInterfaceLayoutDirection == .rightToLeft ? frame.maxX : frame.minX
+        var anchor = window.convertPoint(toScreen: NSPoint(x: leadingX, y: 0))
+        if let event = NSApp.currentEvent, event.window === window,
+           event.type == .leftMouseDown || event.type == .rightMouseDown {
+            let pointer = NSEvent.mouseLocation
+            // The first click on another display can arrive before AppKit moves the
+            // status-item window. Use the click offset and that display's menu bar.
+            if !window.frame.contains(pointer),
+               let screen = NSScreen.screens.first(where: { $0.frame.contains(pointer) }) {
+                anchor.x = pointer.x + leadingX - event.locationInWindow.x
+                anchor.y = min(screen.visibleFrame.maxY, screen.frame.maxY - window.frame.height)
+            }
+        }
+        // popUp positions the menu content. Leave room for its rounded border.
+        anchor.y -= 6
+        button.highlight(true)
+        defer { button.highlight(false) }
+        menu.popUp(positioning: nil, at: anchor, in: nil)
     }
 
     private func addDurations(title: String, seconds: [Int], current: Int, action: Selector) {
