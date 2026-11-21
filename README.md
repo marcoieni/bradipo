@@ -14,6 +14,18 @@ Click the countdown to start a break, pause reminders, restart the timer, or cha
 - After one minute without keyboard or pointer input, bradipo pauses. After five minutes away, you return to a fresh work interval.
 - Putting the Mac or its display to sleep, or switching user sessions, also starts a fresh interval when you return.
 
+### Install
+
+bradipo requires macOS 27.2.1 or later. Download `bradipo-<version>.dmg` from the [latest release](https://github.com/marcoieni/bradipo/releases/latest), open it, and drag bradipo into Applications.
+
+Releases aren't notarized by Apple, so macOS blocks bradipo the first time you open it. To allow it, open **System Settings > Privacy & Security**, click **Open Anyway** next to the message about bradipo, and confirm. If macOS instead reports that bradipo is damaged, remove the download quarantine in Terminal:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/bradipo.app
+```
+
+After that, bradipo opens normally.
+
 ### Build and run
 
 Requires macOS 27.2.1 or later and Swift 6.4 from Xcode or the Command Line Tools. The app uses Apple frameworks and builds without downloading any packages.
@@ -32,3 +44,16 @@ Run `swift test` with Xcode selected. With the standalone Command Line Tools, su
 ```sh
 swift test -Xswiftc -plugin-path -Xswiftc "$(xcode-select -p)/usr/lib/swift/host/plugins/testing"
 ```
+
+### Release
+
+Push a tag of the form `vMAJOR.MINOR.PATCH`:
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The release workflow runs the tests, builds bradipo with the tag's version, and publishes `bradipo-0.2.0.dmg` on a GitHub release for the tag. You don't need to edit `Resources/Info.plist`; its version only applies to local builds. To package a local build the same way, run `./scripts/build-app.sh 0.2.0` and then `./scripts/package-dmg.sh`.
+
+Releases are signed ad hoc and not notarized, which is why users need the Gatekeeper step in [Install](#install). Notarizing requires a paid Apple Developer ID.

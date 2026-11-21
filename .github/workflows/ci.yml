@@ -28,3 +28,4 @@ jobs:
           persist-credentials: false
       - run: swift test
       - run: ./scripts/build-app.sh
+      - run: ./scripts/package-dmg.sh
