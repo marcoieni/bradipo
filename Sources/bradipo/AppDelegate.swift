@@ -40,11 +40,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         activity.onChange = { [weak self] in self?.tick() }
         tick()
-        // Common modes keep the menu-bar clock live while the menu is tracking.
-        let timer = Timer(timeInterval: 1, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
-        timer.tolerance = 0.08
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -65,9 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pauseStatus.isEnabled = false
         menu.addItem(pauseStatus)
 
-        takeBreak.title = "Take a Break"
         takeBreak.target = self
-        takeBreak.action = #selector(startBreak)
         menu.addItem(takeBreak)
         pause.target = self
         pause.action = #selector(togglePause)
@@ -134,7 +127,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func tick() {
-        clock.tick(at: now, activity: activity.sample(detectMeetings: pauseDuringMeetings))
+        let state = activity.sample(detectMeetings: pauseDuringMeetings)
+        clock.tick(at: now, activity: state)
         render()
     }
 
@@ -157,7 +151,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         pauseStatus.isHidden = reason == nil || clock.pauseReason == .manual
         pauseStatus.title = reason ?? ""
-        takeBreak.isEnabled = !resting && (clock.pauseReason == nil || clock.pauseReason == .idle)
+        takeBreak.title = resting ? "Stop break" : "Take a Break"
+        takeBreak.action = resting ? #selector(restartTimer) : #selector(startBreak)
+        takeBreak.isEnabled = resting || clock.pauseReason == nil || clock.pauseReason == .idle
         pause.isEnabled = !resting
         pause.title = clock.isManuallyPaused ? "Resume Reminders" : "Pause Reminders"
         if resting {
@@ -165,6 +161,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             overlay.hide()
         }
+
+        // A headset playing output can stay running when its input stops, so there
+        // may be no device notification. Recheck more often during a meeting pause.
+        let delay: TimeInterval = switch clock.pauseReason {
+        case .meeting: 0.25
+        case nil: clock.timeUntilNextDisplayedSecond
+        default: 1
+        }
+        timer?.invalidate()
+        let next = Timer(timeInterval: delay, target: self, selector: #selector(tick), userInfo: nil, repeats: false)
+        next.tolerance = 0.02
+        RunLoop.main.add(next, forMode: .common)
+        timer = next
     }
 
     @objc private func startBreak() {

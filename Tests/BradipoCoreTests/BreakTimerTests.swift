@@ -18,6 +18,20 @@ import Testing
     #expect(timer.remainingSeconds == 5)
 }
 
+@Test func microphoneReleasePreservesTheFractionOfASecondUntilTheNextDigit() {
+    var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
+    timer.tick(at: 3.75, activity: .active)
+    timer.tick(at: 4, activity: .meeting)
+
+    // The release notification can arrive between any two periodic display updates.
+    timer.tick(at: 11.125, activity: .active)
+    #expect(timer.pauseReason == nil)
+    #expect(timer.remainingSeconds == 17)
+    #expect(timer.timeUntilNextDisplayedSecond == 0.25)
+    timer.tick(at: 11.375, activity: .active)
+    #expect(timer.remainingSeconds == 16)
+}
+
 @Test func shortIdlePausesAndLongIdleCountsAsRest() {
     var timer = BreakTimer(workDuration: 120, breakDuration: 20, now: 0)
     timer.tick(at: 55, activity: .active)
