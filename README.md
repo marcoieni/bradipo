@@ -18,13 +18,13 @@ Click the countdown to start a break, pause reminders, restart the timer, or cha
 
 bradipo requires macOS 27.2.1 or later. Download `bradipo-<version>.dmg` from the [latest release](https://github.com/marcoieni/bradipo/releases/latest), open it, and drag bradipo into Applications.
 
-Releases aren't notarized by Apple, so macOS blocks bradipo the first time you open it. To allow it, open **System Settings > Privacy & Security**, click **Open Anyway** next to the message about bradipo, and confirm. If macOS instead reports that bradipo is damaged, remove the download quarantine in Terminal:
+Releases aren't notarized by Apple, so macOS blocks bradipo the first time you open each newly downloaded version. In the warning, click **Done**, not **Move to Trash**. Then open **System Settings > Privacy & Security**, click **Open Anyway** next to the message about bradipo, and confirm. If macOS instead reports that bradipo is damaged and you downloaded it from this repository's [Releases](https://github.com/marcoieni/bradipo/releases) page, remove the download quarantine in Terminal:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/bradipo.app
 ```
 
-After that, bradipo opens normally.
+If your copy came from anywhere else, move it to the Trash and download it again from the Releases page. Every update is a new download, so allow each new version the same way.
 
 ### Build and run
 

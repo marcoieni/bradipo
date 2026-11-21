@@ -31,5 +31,6 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           gh release create "$GITHUB_REF_NAME" ".build/bradipo-${GITHUB_REF_NAME#v}.dmg" \
+            --verify-tag \
             --generate-notes \
             --notes "Open the disk image and drag bradipo into Applications. Builds are not notarized, so see [Install](https://github.com/$GH_REPO#install) before the first launch."

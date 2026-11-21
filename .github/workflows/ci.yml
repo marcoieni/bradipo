@@ -9,7 +9,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Pull requests cancel their superseded runs; each push to main gets its own group.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -27,5 +28,6 @@ jobs:
         with:
           persist-credentials: false
       - run: swift test
-      - run: ./scripts/build-app.sh
+      # Stamp a version like release.yml does, so that path runs before a tag.
+      - run: ./scripts/build-app.sh 0.0.0
       - run: ./scripts/package-dmg.sh
