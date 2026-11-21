@@ -2,24 +2,27 @@ import AppKit
 import BradipoCore
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
     private let pauseStatus = NSMenuItem()
     private let takeBreak = NSMenuItem()
     private let pause = NSMenuItem()
-    private let overlay = BreakOverlay()
+    private let meetingItem = NSMenuItem()
+    private let login = LoginItem()
+    private lazy var overlay = BreakOverlay { [weak self] in self?.restartTimer() }
     private let activity = ActivityMonitor()
     private var timer: Timer?
 
     private let defaults = UserDefaults.standard
     private var workSeconds: Int
     private var breakSeconds: Int
+    private var pauseDuringMeetings: Bool { defaults.bool(forKey: "pauseDuringMeetings") }
     private var clock: BreakTimer
     private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
     override init() {
-        defaults.register(defaults: ["workSeconds": 20 * 60, "breakSeconds": 20])
+        defaults.register(defaults: ["workSeconds": 20 * 60, "breakSeconds": 20, "pauseDuringMeetings": true])
         workSeconds = min(5999, max(1, defaults.integer(forKey: "workSeconds")))
         breakSeconds = min(5999, max(1, defaults.integer(forKey: "breakSeconds")))
         clock = BreakTimer(workDuration: Double(workSeconds), breakDuration: Double(breakSeconds),
@@ -46,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func buildMenu() {
+        menu.delegate = self
         menu.autoenablesItems = false
         let header = NSMenuItem.sectionHeader(title: "bradipo")
         if let url = Bundle.main.url(forResource: "Sloth", withExtension: "png"),
@@ -64,15 +68,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pause.target = self
         pause.action = #selector(togglePause)
         menu.addItem(pause)
+        menu.addItem(withTitle: "Restart Timer", action: #selector(restartTimer), keyEquivalent: "").target = self
         menu.addItem(.separator())
         addDurations(title: "Work interval", seconds: [5, 10, 20, 30, 45, 60].map { $0 * 60 },
                      current: workSeconds, action: #selector(changeWork))
         addDurations(title: "Break length", seconds: [20, 30, 60, 120, 300],
                      current: breakSeconds, action: #selector(changeBreak))
         menu.addItem(.separator())
+        meetingItem.title = "Pause During Meetings"
+        meetingItem.target = self
+        meetingItem.action = #selector(toggleMeetingPause)
+        menu.addItem(meetingItem)
+        menu.addItem(login.menuItem)
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "About bradipo", action: #selector(showAbout), keyEquivalent: "").target = self
         let quit = menu.addItem(withTitle: "Quit bradipo", action: #selector(NSApplication.terminate(_:)),
                                 keyEquivalent: "")
         quit.target = NSApp
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        meetingItem.state = pauseDuringMeetings ? .on : .off
+        login.refresh()
     }
 
     private func addDurations(title: String, seconds: [Int], current: Int, action: Selector) {
@@ -90,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func tick() {
-        clock.tick(at: now, activity: activity.sample())
+        clock.tick(at: now, activity: activity.sample(detectMeetings: pauseDuringMeetings))
         render()
     }
 
@@ -124,9 +141,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func startBreak() {
-        clock.tick(at: now, activity: activity.sample())
+        clock.tick(at: now, activity: activity.sample(detectMeetings: pauseDuringMeetings))
         clock.startBreak(at: now)
         render()
+    }
+
+    @objc private func restartTimer() {
+        clock.restart(at: now)
+        tick()
+    }
+
+    @objc private func toggleMeetingPause() {
+        defaults.set(!pauseDuringMeetings, forKey: "pauseDuringMeetings")
+        meetingItem.state = pauseDuringMeetings ? .on : .off
+        tick()
+    }
+
+    @objc private func showAbout() {
+        NSApp.activate()
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .credits: NSAttributedString(string: "github.com/marcoieni/bradipo", attributes: [
+                .link: URL(string: "https://github.com/marcoieni/bradipo")!,
+                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+            ]),
+        ])
     }
 
     @objc private func togglePause() {

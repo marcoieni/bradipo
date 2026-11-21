@@ -8,7 +8,7 @@ import CoreGraphics
 final class ActivityMonitor {
     var onChange: (() -> Void)?
 
-    private let cameras = AVCaptureDevice.DiscoverySession(
+    private lazy var cameras = AVCaptureDevice.DiscoverySession(
         deviceTypes: [.builtInWideAngleCamera, .external, .continuityCamera, .deskViewCamera],
         mediaType: .video,
         position: .unspecified
@@ -36,21 +36,23 @@ final class ActivityMonitor {
         for observer in observers { center.removeObserver(observer) }
     }
 
-    func sample() -> ActivityState {
+    func sample(detectMeetings: Bool) -> ActivityState {
         if systemAsleep || screensAsleep || sessionInactive { return .unavailable }
-        if cameras.devices.contains(where: \.isInUseByAnotherApplication) { return .meeting }
-
-        // Check input streams specifically. Music played through a headset with a
-        // built-in microphone should never pause the timer.
-        if let processes = try? AudioHardwareSystem.shared.processes,
-           processes.contains(where: { (try? $0.isRunningInput) == true }) {
-            return .meeting
-        }
+        if detectMeetings && isMeetingInProgress { return .meeting }
 
         // Swift does not import the C macro kCGAnyInputEventType.
         let anyInput = CGEventType(rawValue: UInt32.max)!
         let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyInput)
         return idle >= ActivityState.idleThreshold ? .idle(seconds: idle) : .active
+    }
+
+    private var isMeetingInProgress: Bool {
+        if cameras.devices.contains(where: \.isInUseByAnotherApplication) { return true }
+
+        // Check input streams specifically. Music played through a headset with a
+        // built-in microphone should never pause the timer.
+        let processes = (try? AudioHardwareSystem.shared.processes) ?? []
+        return processes.contains { (try? $0.isRunningInput) == true }
     }
 
     private func observe(
