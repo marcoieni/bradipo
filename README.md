@@ -1,8 +1,12 @@
 # bradipo
 
+<img src="Resources/Sloth.png" alt="bradipo logo" width="240" align="right">
+
 bradipo is a menu-bar break reminder for macOS. A monospaced countdown keeps its place in the bar. Every 20 minutes, a soft green glow frames each display and a sleeping sloth invites you to rest your eyes for 20 seconds. You can keep typing or clicking elsewhere on the screen. Click the sloth card on any display to end the break early and start a fresh work interval.
 
 Click the countdown to start a break, pause reminders, restart the timer, or change the work interval and break length. During a break, choose **Stop break** to start a fresh work interval. Choose **Launch at Login** to have macOS open bradipo when you sign in. **About bradipo** shows the installed version.
+
+<br clear="right">
 
 ### When the clock pauses
 
