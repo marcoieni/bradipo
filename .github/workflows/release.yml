@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Publish release
+    # See ci.yml for the runner and Xcode choice.
+    runs-on: xcode-27
+    timeout-minutes: 30
+    permissions:
+      contents: write # create the release and upload the disk image
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: swift test
+      - run: ./scripts/build-app.sh "${GITHUB_REF_NAME#v}"
+      - run: ./scripts/package-dmg.sh
+      - name: Publish the disk image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" ".build/bradipo-${GITHUB_REF_NAME#v}.dmg" \
+            --verify-tag \
+            --generate-notes \
+            --notes "Open the disk image and drag bradipo into Applications. Builds are not notarized, so see [Install](https://github.com/$GH_REPO#install) before the first launch."
