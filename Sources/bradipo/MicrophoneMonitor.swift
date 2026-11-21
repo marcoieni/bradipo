@@ -48,7 +48,7 @@ final class MicrophoneMonitor {
 
     private func usesRunningMicrophone(_ process: AudioHardwareProcess) -> Bool {
         // CoreSpeech can still report running input after dictation releases the mic.
-        // Check the devices used for input so headset playback alone can't keep the timer paused.
+        // Check the devices used for input so headset playback alone can't delay a break.
         guard (try? process.isRunningInput) == true,
               let data = try? process.propertyData(address: inputDevices) else { return false }
         var ids = [AudioObjectID](repeating: 0, count: data.count / MemoryLayout<AudioObjectID>.stride)

@@ -1,35 +1,77 @@
 import BradipoCore
 import Testing
 
-@Test func meetingAtDeadlineSuppressesTheBreak() {
+@Test func meetingAtDeadlineDefersOneFullBreakUntilRelease() {
     var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
     timer.tick(at: 19, activity: .active)
     timer.tick(at: 20, activity: .meeting)
     timer.startBreak(at: 20)
     #expect(timer.phase == .working)
     #expect(timer.pauseReason == .meeting)
-    #expect(timer.remainingSeconds == 1)
+    #expect(timer.remainingSeconds == 0)
 
-    // Even an hour-long meeting consumes none of the remaining work interval.
-    timer.tick(at: 3620, activity: .active)
-    #expect(timer.remainingSeconds == 1)
-    timer.tick(at: 3621, activity: .active)
+    timer.tick(at: 3620, activity: .meeting)
+    #expect(timer.phase == .working)
+    #expect(timer.remainingSeconds == 0)
+
+    // macOS can report an hour without keyboard input on the first sample after a call.
+    timer.tick(at: 3620.25, activity: .idle(seconds: 3600))
     #expect(timer.phase == .resting)
     #expect(timer.remainingSeconds == 5)
+    timer.tick(at: 3625.25, activity: .idle(seconds: 3605))
+    #expect(timer.phase == .working)
+    #expect(timer.remainingSeconds == 20)
 }
 
-@Test func microphoneReleasePreservesTheFractionOfASecondUntilTheNextDigit() {
+@Test func dictationCountsTowardTheOriginalWorkDeadline() {
     var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
     timer.tick(at: 3.75, activity: .active)
     timer.tick(at: 4, activity: .meeting)
-
-    // The release notification can arrive between any two periodic display updates.
-    timer.tick(at: 11.125, activity: .active)
+    timer.startBreak(at: 4)
+    timer.tick(at: 9, activity: .meeting)
+    #expect(timer.phase == .working)
     #expect(timer.pauseReason == nil)
-    #expect(timer.remainingSeconds == 17)
-    #expect(timer.timeUntilNextDisplayedSecond == 0.25)
-    timer.tick(at: 11.375, activity: .active)
-    #expect(timer.remainingSeconds == 16)
+    #expect(timer.remainingSeconds == 11)
+
+    timer.tick(at: 11.125, activity: .active)
+    #expect(timer.phase == .working)
+    #expect(timer.remainingSeconds == 9)
+    #expect(timer.timeUntilNextDisplayedSecond == 0.875)
+    timer.tick(at: 20, activity: .active)
+    #expect(timer.phase == .resting)
+}
+
+@Test func postMeetingIdleStartsWhenTheDevicesAreReleased() {
+    var timer = BreakTimer(workDuration: 600, breakDuration: 5, now: 0)
+    timer.tick(at: 1, activity: .meeting)
+    timer.tick(at: 400, activity: .idle(seconds: 400))
+    #expect(timer.pauseReason == nil)
+    #expect(timer.remainingSeconds == 200)
+
+    timer.tick(at: 459, activity: .idle(seconds: 459))
+    #expect(timer.remainingSeconds == 141)
+    timer.tick(at: 460, activity: .idle(seconds: 460))
+    #expect(timer.pauseReason == .idle)
+    #expect(timer.remainingSeconds == 141)
+    timer.tick(at: 700, activity: .idle(seconds: 700))
+    #expect(timer.remainingSeconds == 600)
+}
+
+@Test func manualPauseHoldsAnOverdueBreakAndSleepClearsIt() {
+    var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
+    timer.tick(at: 25, activity: .meeting)
+    timer.setManuallyPaused(true, at: 25)
+    timer.tick(at: 30, activity: .active)
+    #expect(timer.pauseReason == .manual)
+    #expect(timer.remainingSeconds == 0)
+
+    timer.setManuallyPaused(false, at: 35)
+    timer.tick(at: 35, activity: .meeting)
+    #expect(timer.pauseReason == .meeting)
+    timer.tick(at: 36, activity: .unavailable)
+    timer.tick(at: 100, activity: .active)
+    #expect(timer.phase == .working)
+    #expect(timer.remainingSeconds == 20)
 }
 
 @Test func shortIdlePausesAndLongIdleCountsAsRest() {
@@ -83,9 +125,9 @@ func clearsExistingBreakWhenInterrupted(activity: ActivityState) {
     timer.startBreak(at: 100)
     timer.tick(at: 104, activity: activity)
     #expect(timer.phase == .working)
-    #expect(timer.pauseReason != nil)
-    timer.tick(at: 604, activity: .active)
     #expect(timer.remainingSeconds == 20)
+    timer.tick(at: 108, activity: .active)
+    #expect(timer.remainingSeconds == (activity == .meeting ? 16 : 20))
 }
 
 @Test func resumeRespectsEnvironmentAndSleepResetsWork() {
@@ -94,7 +136,7 @@ func clearsExistingBreakWhenInterrupted(activity: ActivityState) {
     timer.setManuallyPaused(true, at: 95)
     timer.tick(at: 110, activity: .meeting)
     timer.setManuallyPaused(false, at: 111)
-    #expect(timer.pauseReason == .meeting)
+    #expect(!timer.canStartBreak)
     #expect(timer.remainingSeconds == 5)
 
     timer.tick(at: 150, activity: .unavailable)
@@ -127,15 +169,17 @@ func clearsExistingBreakWhenInterrupted(activity: ActivityState) {
     #expect(timer.remainingSeconds == 108)
 }
 
-@Test func restartClearsManualPauseAndRespectsAnOngoingMeeting() {
+@Test func restartDuringAMeetingClearsThePendingBreak() {
     var timer = BreakTimer(workDuration: 120, breakDuration: 20, now: 0)
-    timer.tick(at: 60, activity: .active)
-    timer.setManuallyPaused(true, at: 60)
-    timer.tick(at: 65, activity: .meeting)
-    timer.restart(at: 70)
+    timer.tick(at: 120, activity: .meeting)
     #expect(timer.pauseReason == .meeting)
+    timer.setManuallyPaused(true, at: 121)
+    timer.restart(at: 130)
+    #expect(timer.pauseReason == nil)
     #expect(timer.remainingSeconds == 120)
-    timer.tick(at: 90, activity: .active)
-    timer.tick(at: 91, activity: .active)
-    #expect(timer.remainingSeconds == 119)
+    timer.tick(at: 135, activity: .meeting)
+    #expect(timer.remainingSeconds == 115)
+    timer.tick(at: 140, activity: .active)
+    #expect(timer.phase == .working)
+    #expect(timer.remainingSeconds == 110)
 }

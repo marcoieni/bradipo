@@ -9,15 +9,6 @@ public enum ActivityState: Equatable, Sendable {
     public static let idleThreshold: TimeInterval = 60
     public static let restedThreshold: TimeInterval = 5 * 60
 
-    var pauseReason: PauseReason? {
-        switch self {
-        case .active: nil
-        case .idle(let seconds): seconds >= Self.idleThreshold ? .idle : nil
-        case .meeting: .meeting
-        case .unavailable: .unavailable
-        }
-    }
-
     var countsAsRest: Bool {
         switch self {
         case .unavailable: true
@@ -42,7 +33,17 @@ public struct BreakTimer: Sendable {
     public var timeUntilNextDisplayedSecond: TimeInterval { remaining - Double(remainingSeconds - 1) }
     public var pauseReason: PauseReason? {
         guard phase == .working else { return nil }
-        return isManuallyPaused ? .manual : activity.pauseReason
+        if isManuallyPaused { return .manual }
+        return switch activity {
+        case .active: nil
+        case .idle(let seconds): seconds >= ActivityState.idleThreshold ? .idle : nil
+        case .meeting: remaining == 0 ? .meeting : nil
+        case .unavailable: .unavailable
+        }
+    }
+
+    public var canStartBreak: Bool {
+        phase == .working && !isManuallyPaused && activity != .meeting && activity != .unavailable
     }
 
     private var workDuration: TimeInterval
@@ -50,6 +51,7 @@ public struct BreakTimer: Sendable {
     private var remaining: TimeInterval
     private var lastTick: TimeInterval
     private var activity: ActivityState = .active
+    private var lastMeetingEnd: TimeInterval?
 
     public init(workDuration: TimeInterval, breakDuration: TimeInterval, now: TimeInterval) {
         precondition(workDuration >= 1 && breakDuration >= 1)
@@ -64,15 +66,22 @@ public struct BreakTimer: Sendable {
         let wasPaused = pauseReason != nil
         let elapsed = max(0, now - lastTick)
         lastTick = max(lastTick, now)
-        activity = newActivity
+        if activity == .meeting && newActivity != .meeting { lastMeetingEnd = lastTick }
+        // Keyboard and pointer idle time can span an entire call. Only time away
+        // after the call can pause the countdown or count as a rest.
+        if case .idle(let seconds) = newActivity, let lastMeetingEnd {
+            activity = .idle(seconds: min(seconds, lastTick - lastMeetingEnd))
+        } else {
+            activity = newActivity
+        }
 
         switch phase {
         case .working:
             if activity.countsAsRest {
                 remaining = workDuration
-            } else if !wasPaused && pauseReason == nil {
-                remaining -= elapsed
-                if remaining <= 0 { startBreak(at: now) }
+            } else if pauseReason == nil {
+                if !wasPaused { remaining = max(0, remaining - elapsed) }
+                if remaining == 0 { startBreak(at: now) }
             }
         case .resting:
             // A person looking away during a break should get the whole break.
@@ -99,7 +108,7 @@ public struct BreakTimer: Sendable {
 
     public mutating func startBreak(at now: TimeInterval) {
         // Assistive input can activate the menu without resetting macOS's idle clock.
-        guard phase == .working, pauseReason == nil || pauseReason == .idle else { return }
+        guard canStartBreak else { return }
         phase = .resting
         remaining = breakDuration
         lastTick = now
