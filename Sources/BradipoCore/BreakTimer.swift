@@ -78,10 +78,16 @@ public struct BreakTimer: Sendable {
             // If they join a call or close the laptop, clear the visual immediately.
             remaining -= elapsed
             if remaining <= 0 || activity == .meeting || activity == .unavailable {
-                phase = .working
-                remaining = workDuration
+                restart(at: now)
             }
         }
+    }
+
+    public mutating func restart(at now: TimeInterval) {
+        phase = .working
+        remaining = workDuration
+        isManuallyPaused = false
+        lastTick = now
     }
 
     public mutating func setManuallyPaused(_ paused: Bool, at now: TimeInterval) {

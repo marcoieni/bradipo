@@ -101,3 +101,27 @@ func clearsExistingBreakWhenInterrupted(activity: ActivityState) {
     #expect(timer.phase == .resting)
     #expect(timer.remainingSeconds == 5)
 }
+
+@Test func restartingDuringABreakStartsAFreshWorkInterval() {
+    var timer = BreakTimer(workDuration: 120, breakDuration: 20, now: 0)
+    timer.startBreak(at: 65)
+    timer.restart(at: 73)
+
+    // The original break deadline must not end the new work interval.
+    timer.tick(at: 85, activity: .active)
+    #expect(timer.phase == .working)
+    #expect(timer.remainingSeconds == 108)
+}
+
+@Test func restartClearsManualPauseAndRespectsAnOngoingMeeting() {
+    var timer = BreakTimer(workDuration: 120, breakDuration: 20, now: 0)
+    timer.tick(at: 60, activity: .active)
+    timer.setManuallyPaused(true, at: 60)
+    timer.tick(at: 65, activity: .meeting)
+    timer.restart(at: 70)
+    #expect(timer.pauseReason == .meeting)
+    #expect(timer.remainingSeconds == 120)
+    timer.tick(at: 90, activity: .active)
+    timer.tick(at: 91, activity: .active)
+    #expect(timer.remainingSeconds == 119)
+}
