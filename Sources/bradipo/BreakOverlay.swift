@@ -38,6 +38,15 @@ final class BreakOverlay: NSObject {
         panels.removeAll()
     }
 
+    @objc func resetBanners() {
+        BreakCardPlacement.resetAll()
+        for panel in panels {
+            if let card = panel.contentView as? CardHostingView, let placement = card.placement {
+                panel.setFrame(placement.savedFrame, display: true)
+            }
+        }
+    }
+
     @objc private func displaysChanged() {
         showOnAllDisplays(animated: false)
     }
@@ -58,8 +67,9 @@ final class BreakOverlay: NSObject {
                 .map { CFUUIDCreateString(nil, $0.takeRetainedValue()) as String } ?? screen.localizedName
             let placement = BreakCardPlacement(displayID: displayID, visibleFrame: screen.visibleFrame, cardSize: size)
             card.placement = placement
-            let cardFrame = NSRect(origin: placement.savedOrigin, size: size)
-            return [glow, ReminderPanel(content: card, frame: cardFrame, receivesClicks: true)]
+            card.sizingOptions = []
+            card.rootView.naturalSize = size
+            return [glow, ReminderPanel(content: card, frame: placement.savedFrame, receivesClicks: true)]
         }
 
         for panel in panels {
@@ -105,23 +115,46 @@ private final class ReminderPanel: NSPanel {
 }
 
 private final class CardHostingView: NSHostingView<BreakCard> {
+    private typealias Corner = BreakCardPlacement.Corner
+    private struct Grab {
+        let pointer: NSPoint
+        let frame: NSRect
+        let corner: Corner?
+    }
+
     var placement: BreakCardPlacement?
-    private var grabOffset: NSPoint?
+    private var grab: Grab?
     private var isDragging = false
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    // Keep the entire capsule draggable, including the text and image.
+    // Route gestures on the label and corner grips to the same view.
     override func hitTest(_ point: NSPoint) -> NSView? {
-        containsCard(convert(point, from: superview)) ? self : nil
+        let local = convert(point, from: superview)
+        return containsCard(local) || corner(at: local) != nil ? self : nil
     }
 
     private func containsCard(_ point: NSPoint) -> Bool {
-        NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2).contains(point)
+        let radius = min(29, bounds.height / 2)
+        return NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).contains(point)
+    }
+
+    private func gripRect(_ corner: Corner) -> NSRect {
+        let side = min(20, bounds.width / 2, bounds.height / 2)
+        let atMinY = corner.isBottom != isFlipped
+        return NSRect(x: corner.isLeft ? bounds.minX : bounds.maxX - side,
+                      y: atMinY ? bounds.minY : bounds.maxY - side, width: side, height: side)
+    }
+
+    private func corner(at point: NSPoint) -> Corner? {
+        Corner.allCases.first { gripRect($0).contains(point) }
     }
 
     override func mouseDown(with event: NSEvent) {
-        grabOffset = event.locationInWindow
+        guard let window else { return }
+        let point = event.locationInWindow
+        grab = Grab(pointer: window.convertPoint(toScreen: point), frame: window.frame,
+                    corner: corner(at: convert(point, from: nil)))
         isDragging = false
     }
 
@@ -130,19 +163,23 @@ private final class CardHostingView: NSHostingView<BreakCard> {
     }
 
     private func updateDrag(at point: NSPoint) {
-        guard let window, window.isVisible, let grabOffset, let placement else { return }
-        guard isDragging || hypot(point.x - grabOffset.x, point.y - grabOffset.y) >= 4 else { return }
-        isDragging = true
+        guard let window, window.isVisible, let grab, let placement else { return }
         let pointer = window.convertPoint(toScreen: point)
-        let origin = NSPoint(x: pointer.x - grabOffset.x, y: pointer.y - grabOffset.y)
-        window.setFrameOrigin(placement.move(to: origin))
+        let delta = CGVector(dx: pointer.x - grab.pointer.x, dy: pointer.y - grab.pointer.y)
+        guard isDragging || hypot(delta.dx, delta.dy) >= 4 else { return }
+        isDragging = true
+        if let corner = grab.corner {
+            window.setFrame(placement.resize(grab.frame, from: corner, by: delta), display: true)
+        } else {
+            window.setFrameOrigin(placement.move(to: grab.frame.offsetBy(dx: delta.dx, dy: delta.dy).origin))
+        }
     }
 
     override func mouseUp(with event: NSEvent) {
-        guard grabOffset != nil else { return }
+        guard let grab else { return }
         updateDrag(at: event.locationInWindow)
-        grabOffset = nil
-        if !isDragging, window?.isVisible == true, containsCard(convert(event.locationInWindow, from: nil)) {
+        self.grab = nil
+        if !isDragging, grab.corner == nil, window?.isVisible == true, containsCard(convert(event.locationInWindow, from: nil)) {
             rootView.onEndBreak()
         }
     }
@@ -150,6 +187,15 @@ private final class CardHostingView: NSHostingView<BreakCard> {
     override func resetCursorRects() {
         super.resetCursorRects()
         addCursorRect(bounds, cursor: .openHand)
+        for corner in Corner.allCases {
+            let position: NSCursor.FrameResizePosition = switch corner {
+            case .bottomLeft: .bottomLeft
+            case .bottomRight: .bottomRight
+            case .topLeft: .topLeft
+            case .topRight: .topRight
+            }
+            addCursorRect(gripRect(corner), cursor: .frameResize(position: position, directions: .all))
+        }
     }
 }
 
@@ -190,11 +236,55 @@ private struct BreakCard: View {
     let sloth: NSImage?
     let countdown: BreakCountdown
     let onEndBreak: () -> Void
+    var naturalSize: CGSize?
+    private var hover = State(initialValue: false)
 
     private let ink = Color(red: 0.12, green: 0.19, blue: 0.16)
     private let cream = Color(red: 0.97, green: 0.96, blue: 0.89)
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 29)
+        Group {
+            if let naturalSize {
+                GeometryReader { area in
+                    label.scaleEffect(min(area.size.width / naturalSize.width, area.size.height / naturalSize.height))
+                        .frame(width: area.size.width, height: area.size.height)
+                }
+            } else {
+                label
+            }
+        }
+        .background(ink, in: shape)
+        .overlay { shape.strokeBorder(cream.opacity(0.24), lineWidth: 1) }
+        .overlay {
+            if hover.wrappedValue {
+                Canvas { context, size in
+                    var grips = Path()
+                    for corner in BreakCardPlacement.Corner.allCases {
+                        let x: CGFloat = corner.isLeft ? 4 : size.width - 4
+                        let y: CGFloat = corner.isBottom ? size.height - 4 : 4
+                        grips.move(to: CGPoint(x: x + (corner.isLeft ? 7 : -7), y: y))
+                        grips.addLine(to: CGPoint(x: x, y: y))
+                        grips.addLine(to: CGPoint(x: x, y: y + (corner.isBottom ? -7 : 7)))
+                    }
+                    context.stroke(grips, with: .color(sage), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                }
+            }
+        }
+        // Give the window server a hit target even at the transparent-looking corners.
+        .background(Color.black.opacity(0.01))
+        .contentShape(Rectangle())
+        .onHover { hover.wrappedValue = $0 }
+        .focusable(false)
+        .help("Drag to move, drag a corner to resize, or click to end this break")
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { onEndBreak() }
+        .accessibilityLabel("End break")
+        .accessibilityValue("\(countdown.seconds) seconds remaining")
+    }
+
+    private var label: some View {
         HStack(spacing: 12) {
             if let sloth {
                 Image(nsImage: sloth)
@@ -217,16 +307,6 @@ private struct BreakCard: View {
         .padding(.leading, sloth == nil ? 20 : 8)
         .padding(.trailing, 20)
         .frame(height: 58)
-        .background(ink, in: Capsule())
-        .overlay { Capsule().strokeBorder(cream.opacity(0.24), lineWidth: 1) }
-        .contentShape(Capsule())
         .fixedSize()
-        .focusable(false)
-        .help("Drag to move, or click to end this break")
-        .accessibilityElement(children: .ignore)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction { onEndBreak() }
-        .accessibilityLabel("End break")
-        .accessibilityValue("\(countdown.seconds) seconds remaining")
     }
 }

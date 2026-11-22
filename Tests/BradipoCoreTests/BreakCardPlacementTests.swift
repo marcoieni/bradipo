@@ -1,4 +1,5 @@
 import BradipoCore
+import CoreGraphics
 import Foundation
 import Testing
 
@@ -28,4 +29,67 @@ import Testing
     // Dragging beyond the bottom-right edge should leave the entire card reachable.
     #expect(restored.move(to: CGPoint(x: 900, y: -500)) == CGPoint(x: 420, y: -400))
     #expect(placement("external", on: changedScreen).savedOrigin == CGPoint(x: 420, y: -400))
+}
+
+@Test func resetRestoresCurrentAndDisconnectedDisplays() {
+    let suite = "bradipo-tests-" + UUID().uuidString
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+
+    let screen = CGRect(x: 0, y: 0, width: 1000, height: 600)
+    let size = CGSize(width: 200, height: 60)
+    let card = BreakCardPlacement(displayID: "built-in", visibleFrame: screen, cardSize: size, defaults: defaults)
+    _ = card.move(to: CGPoint(x: 10, y: 100))
+    _ = card.resize(card.savedFrame, from: .topRight, by: CGVector(dx: 200, dy: 90))
+    // A disconnected display has a saved position but no live card to reset.
+    defaults.set([1.0, 1.0, 400.0, 150.0], forKey: "breakCardPosition.external")
+    defaults.set(900, forKey: "workSeconds")
+
+    BreakCardPlacement.resetAll(in: defaults)
+    let reconnected = BreakCardPlacement(displayID: "external", visibleFrame: screen, cardSize: size, defaults: defaults)
+    let original = CGRect(x: 400, y: 22, width: 200, height: 60)
+    #expect(card.savedFrame == original)
+    #expect(reconnected.savedFrame == original)
+    #expect(defaults.integer(forKey: "workSeconds") == 900)
+}
+
+@Test(arguments: BreakCardPlacement.Corner.allCases)
+func resizeAnchorsTheOppositeCornerAndPersists(corner: BreakCardPlacement.Corner) {
+    let suite = "bradipo-tests-" + UUID().uuidString
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let screen = CGRect(x: -1000, y: 40, width: 1000, height: 660)
+    let size = CGSize(width: 200, height: 60)
+    func placement(_ display: String = "external") -> BreakCardPlacement {
+        BreakCardPlacement(displayID: display, visibleFrame: screen, cardSize: size, defaults: defaults)
+    }
+
+    // Start with a position saved by the move-only version of Bradipo.
+    defaults.set([0.5, 0.5], forKey: "breakCardPosition.external")
+    let card = placement()
+    let start = card.savedFrame
+    #expect(start == CGRect(x: -600, y: 340, width: 200, height: 60))
+    let delta = CGVector(dx: corner.isLeft ? -100 : 100, dy: corner.isBottom ? -20 : 20)
+    let resized = card.resize(start, from: corner, by: delta)
+    #expect(resized == CGRect(x: start.minX - (corner.isLeft ? 100 : 0),
+                              y: start.minY - (corner.isBottom ? 20 : 0), width: 300, height: 80))
+    #expect(placement().savedFrame == resized)
+    _ = card.move(to: screen.origin)
+    #expect(placement().savedFrame == CGRect(origin: screen.origin, size: resized.size))
+    #expect(placement("other").savedFrame.size == size)
+}
+
+@Test func cornerResizeStopsAtTheScreenEdgeAndMinimumReadableSize() {
+    let suite = "bradipo-tests-" + UUID().uuidString
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let screen = CGRect(x: 50, y: -500, width: 800, height: 500)
+    let card = BreakCardPlacement(displayID: "small", visibleFrame: screen,
+                                  cardSize: CGSize(width: 200, height: 60), defaults: defaults)
+    let start = CGRect(x: 150, y: -300, width: 200, height: 60)
+    let large = card.resize(start, from: .topRight, by: CGVector(dx: 2000, dy: 2000))
+    #expect(large == CGRect(x: 150, y: -300, width: 700, height: 300))
+    // Pull past the opposite corner: the card stays upright and its contents stay readable.
+    let small = card.resize(large, from: .bottomLeft, by: CGVector(dx: 3000, dy: 3000))
+    #expect(small == CGRect(x: 700, y: -45, width: 150, height: 45))
 }

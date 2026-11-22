@@ -2,34 +2,86 @@ import CoreGraphics
 import Foundation
 
 public struct BreakCardPlacement {
+    public enum Corner: CaseIterable, Sendable {
+        case bottomLeft, bottomRight, topLeft, topRight
+
+        public var isLeft: Bool { self == .bottomLeft || self == .topLeft }
+        public var isBottom: Bool { self == .bottomLeft || self == .bottomRight }
+    }
+
+    private static let keyPrefix = "breakCardPosition."
     private let defaults: UserDefaults
     private let key: String
-    // The area the card's lower-left corner can occupy while the whole card is visible.
-    private let travel: CGRect
+    private let visibleFrame: CGRect
+    private let defaultSize: CGSize
 
     public init(displayID: String, visibleFrame: CGRect, cardSize: CGSize, defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        key = "breakCardPosition." + displayID
-        travel = CGRect(x: visibleFrame.minX, y: visibleFrame.minY,
-                        width: max(0, visibleFrame.width - cardSize.width),
-                        height: max(0, visibleFrame.height - cardSize.height))
+        key = Self.keyPrefix + displayID
+        self.visibleFrame = visibleFrame
+        defaultSize = cardSize
     }
 
-    public var savedOrigin: CGPoint {
-        if let position = defaults.array(forKey: key) as? [Double], position.count == 2,
-           (0...1).contains(position[0]), (0...1).contains(position[1]) {
-            return CGPoint(x: travel.minX + travel.width * position[0],
-                           y: travel.minY + travel.height * position[1])
+    public static func resetAll(in defaults: UserDefaults = .standard) {
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(keyPrefix) {
+            defaults.removeObject(forKey: key)
         }
-        return CGPoint(x: travel.midX.rounded(), y: min(travel.minY + 22, travel.maxY))
     }
+
+    public var savedFrame: CGRect {
+        let values = defaults.array(forKey: key) as? [Double] ?? []
+        // Existing two-value preferences store only the relative position.
+        let hasSize = values.count == 4 && values[2].isFinite && values[2] > 0 && values[3].isFinite && values[3] > 0
+        let requested = hasSize ? CGSize(width: values[2], height: values[3]) : defaultSize
+        let size = constrainedSize(requested, maximum: visibleFrame.size)
+        let travel = originRange(for: size)
+        if (values.count == 2 || hasSize), (0...1).contains(values[0]), (0...1).contains(values[1]) {
+            return CGRect(x: travel.minX + travel.width * values[0], y: travel.minY + travel.height * values[1],
+                          width: size.width, height: size.height)
+        }
+        return CGRect(x: travel.midX.rounded(), y: min(travel.minY + 22, travel.maxY),
+                      width: size.width, height: size.height)
+    }
+
+    public var savedOrigin: CGPoint { savedFrame.origin }
 
     public func move(to origin: CGPoint) -> CGPoint {
+        let size = savedFrame.size
+        let travel = originRange(for: size)
         let x = min(max(origin.x, travel.minX), travel.maxX)
         let y = min(max(origin.y, travel.minY), travel.maxY)
-        // Store fractions so moving or resizing the display preserves the relative position.
-        defaults.set([travel.width > 0 ? (x - travel.minX) / travel.width : 0.5,
-                      travel.height > 0 ? (y - travel.minY) / travel.height : 0], forKey: key)
-        return CGPoint(x: x, y: y)
+        return save(CGRect(x: x, y: y, width: size.width, height: size.height)).origin
+    }
+
+    public func resize(_ frame: CGRect, from corner: Corner, by delta: CGVector) -> CGRect {
+        let anchorX = corner.isLeft ? frame.maxX : frame.minX
+        let anchorY = corner.isBottom ? frame.maxY : frame.minY
+        let maximum = CGSize(width: corner.isLeft ? anchorX - visibleFrame.minX : visibleFrame.maxX - anchorX,
+                             height: corner.isBottom ? anchorY - visibleFrame.minY : visibleFrame.maxY - anchorY)
+        let requested = CGSize(width: frame.width + (corner.isLeft ? -delta.dx : delta.dx),
+                               height: frame.height + (corner.isBottom ? -delta.dy : delta.dy))
+        let size = constrainedSize(requested, maximum: maximum)
+        return save(CGRect(x: corner.isLeft ? anchorX - size.width : anchorX,
+                           y: corner.isBottom ? anchorY - size.height : anchorY,
+                           width: size.width, height: size.height))
+    }
+
+    private func constrainedSize(_ size: CGSize, maximum: CGSize) -> CGSize {
+        // Keep the label readable when shrinking and the entire card reachable when enlarging.
+        CGSize(width: min(maximum.width, max(defaultSize.width * 0.75, size.width)),
+               height: min(maximum.height, max(defaultSize.height * 0.75, size.height)))
+    }
+
+    private func originRange(for size: CGSize) -> CGRect {
+        CGRect(origin: visibleFrame.origin, size: CGSize(width: visibleFrame.width - size.width,
+                                                        height: visibleFrame.height - size.height))
+    }
+
+    private func save(_ frame: CGRect) -> CGRect {
+        let travel = originRange(for: frame.size)
+        let x = travel.width > 0 ? (frame.minX - travel.minX) / travel.width : 0.5
+        let y = travel.height > 0 ? (frame.minY - travel.minY) / travel.height : 0
+        defaults.set([min(1, max(0, x)), min(1, max(0, y)), frame.width, frame.height], forKey: key)
+        return frame
     }
 }
