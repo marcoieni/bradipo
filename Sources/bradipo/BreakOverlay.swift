@@ -1,4 +1,6 @@
 import AppKit
+import BradipoCore
+import ColorSync
 import Observation
 import SwiftUI
 
@@ -52,11 +54,11 @@ final class BreakOverlay: NSObject {
                 sloth: sloth, countdown: countdown, onEndBreak: onEndBreak
             ))
             let size = card.fittingSize
-            let cardFrame = NSRect(
-                x: (screen.frame.midX - size.width / 2).rounded(),
-                y: screen.visibleFrame.minY + 22,
-                width: size.width, height: size.height
-            )
+            let displayID = screen.cgDirectDisplayID.flatMap { CGDisplayCreateUUIDFromDisplayID($0) }
+                .map { CFUUIDCreateString(nil, $0.takeRetainedValue()) as String } ?? screen.localizedName
+            let placement = BreakCardPlacement(displayID: displayID, visibleFrame: screen.visibleFrame, cardSize: size)
+            card.placement = placement
+            let cardFrame = NSRect(origin: placement.savedOrigin, size: size)
             return [glow, ReminderPanel(content: card, frame: cardFrame, receivesClicks: true)]
         }
 
@@ -103,11 +105,51 @@ private final class ReminderPanel: NSPanel {
 }
 
 private final class CardHostingView: NSHostingView<BreakCard> {
+    var placement: BreakCardPlacement?
+    private var grabOffset: NSPoint?
+    private var isDragging = false
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    // Keep the entire capsule draggable, including the text and image.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        containsCard(convert(point, from: superview)) ? self : nil
+    }
+
+    private func containsCard(_ point: NSPoint) -> Bool {
+        NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2).contains(point)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        grabOffset = event.locationInWindow
+        isDragging = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        updateDrag(at: event.locationInWindow)
+    }
+
+    private func updateDrag(at point: NSPoint) {
+        guard let window, window.isVisible, let grabOffset, let placement else { return }
+        guard isDragging || hypot(point.x - grabOffset.x, point.y - grabOffset.y) >= 4 else { return }
+        isDragging = true
+        let pointer = window.convertPoint(toScreen: point)
+        let origin = NSPoint(x: pointer.x - grabOffset.x, y: pointer.y - grabOffset.y)
+        window.setFrameOrigin(placement.move(to: origin))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard grabOffset != nil else { return }
+        updateDrag(at: event.locationInWindow)
+        grabOffset = nil
+        if !isDragging, window?.isVisible == true, containsCard(convert(event.locationInWindow, from: nil)) {
+            rootView.onEndBreak()
+        }
+    }
 
     override func resetCursorRects() {
         super.resetCursorRects()
-        addCursorRect(bounds, cursor: .pointingHand)
+        addCursorRect(bounds, cursor: .openHand)
     }
 }
 
@@ -153,37 +195,37 @@ private struct BreakCard: View {
     private let cream = Color(red: 0.97, green: 0.96, blue: 0.89)
 
     var body: some View {
-        Button(action: onEndBreak) {
-            HStack(spacing: 12) {
-                if let sloth {
-                    Image(nsImage: sloth)
-                        .resizable()
-                        .scaledToFit()
-                        .padding(3)
-                        .frame(width: 42, height: 42)
-                        .background(cream, in: Circle())
-                }
-                Text("Rest your eyes")
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .foregroundStyle(cream)
-                Rectangle()
-                    .fill(sage.opacity(0.40))
-                    .frame(width: 1, height: 18)
-                Text(verbatim: String(format: "%02d:%02d", countdown.seconds / 60, countdown.seconds % 60))
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Color(red: 0.80, green: 0.87, blue: 0.71))
+        HStack(spacing: 12) {
+            if let sloth {
+                Image(nsImage: sloth)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(3)
+                    .frame(width: 42, height: 42)
+                    .background(cream, in: Circle())
             }
-            .padding(.leading, sloth == nil ? 20 : 8)
-            .padding(.trailing, 20)
-            .frame(height: 58)
-            .background(ink, in: Capsule())
-            .overlay { Capsule().strokeBorder(cream.opacity(0.24), lineWidth: 1) }
-            .contentShape(Capsule())
+            Text("Rest your eyes")
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(cream)
+            Rectangle()
+                .fill(sage.opacity(0.40))
+                .frame(width: 1, height: 18)
+            Text(verbatim: String(format: "%02d:%02d", countdown.seconds / 60, countdown.seconds % 60))
+                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color(red: 0.80, green: 0.87, blue: 0.71))
         }
-        .buttonStyle(.plain)
+        .padding(.leading, sloth == nil ? 20 : 8)
+        .padding(.trailing, 20)
+        .frame(height: 58)
+        .background(ink, in: Capsule())
+        .overlay { Capsule().strokeBorder(cream.opacity(0.24), lineWidth: 1) }
+        .contentShape(Capsule())
         .fixedSize()
         .focusable(false)
-        .help("Click to end this break")
+        .help("Drag to move, or click to end this break")
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { onEndBreak() }
         .accessibilityLabel("End break")
         .accessibilityValue("\(countdown.seconds) seconds remaining")
     }
