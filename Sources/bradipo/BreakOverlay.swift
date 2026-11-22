@@ -26,6 +26,8 @@ final class BreakOverlay: NSObject {
     func show(secondsRemaining: Int) {
         if let countdown {
             countdown.seconds = secondsRemaining
+            // Another app can change the cursor without moving the pointer.
+            refreshBannerCursor()
             return
         }
         countdown = BreakCountdown(seconds: secondsRemaining)
@@ -225,7 +227,7 @@ private final class CardHostingView: NSHostingView<BreakCard> {
     private func refreshCursor() {
         refreshPending = false
         let pointer = NSEvent.mouseLocation
-        guard let window, window.isVisible,
+        guard let window, window.isVisible, window.frame.contains(pointer),
               NSWindow.windowNumber(at: pointer, belowWindowWithWindowNumber: 0) == window.windowNumber
         else {
             releaseCursor()
