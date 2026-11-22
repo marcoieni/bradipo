@@ -71,6 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                      current: workSeconds, action: #selector(changeWork))
         addDurations(title: "Break length", seconds: [20, 30, 60, 120, 300],
                      current: breakSeconds, action: #selector(changeBreak))
+        menu.addItem(withTitle: "Reset Banner Size and Position", action: #selector(BreakOverlay.resetBanners),
+                     keyEquivalent: "").target = overlay
         menu.addItem(.separator())
         meetingItem.title = "Defer Breaks During Meetings"
         meetingItem.target = self
