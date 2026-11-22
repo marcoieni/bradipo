@@ -43,6 +43,7 @@ final class BreakOverlay: NSObject {
         for panel in panels {
             if let card = panel.contentView as? CardHostingView, let placement = card.placement {
                 panel.setFrame(placement.savedFrame, display: true)
+                card.scheduleCursorUpdate()
             }
         }
     }
@@ -80,14 +81,27 @@ final class BreakOverlay: NSObject {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.55
                 panels.forEach { $0.animator().alphaValue = 1 }
+            } completionHandler: { [weak self] in
+                Task { @MainActor in self?.refreshBannerCursor() }
             }
+        } else {
+            refreshBannerCursor()
         }
+    }
+
+    private func refreshBannerCursor() {
+        for panel in panels { (panel.contentView as? CardHostingView)?.scheduleCursorUpdate() }
     }
 }
 
 private final class ReminderPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    override func orderOut(_ sender: Any?) {
+        (contentView as? CardHostingView)?.releaseCursor()
+        super.orderOut(sender)
+    }
 
     init(content: NSView, frame: NSRect, receivesClicks: Bool) {
         super.init(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel],
@@ -97,6 +111,7 @@ private final class ReminderPanel: NSPanel {
         hasShadow = receivesClicks
         hidesOnDeactivate = false
         ignoresMouseEvents = !receivesClicks
+        acceptsMouseMovedEvents = receivesClicks
         if receivesClicks {
             setAccessibilityLabel("Break reminder")
         } else {
@@ -125,6 +140,12 @@ private final class CardHostingView: NSHostingView<BreakCard> {
     var placement: BreakCardPlacement?
     private var grab: Grab?
     private var isDragging = false
+    private var refreshPending = false
+    private static weak var cursorOwner: CardHostingView?
+    private lazy var hoverArea = NSTrackingArea(
+        rect: .zero, options: [.inVisibleRect, .activeAlways, .mouseEnteredAndExited, .mouseMoved],
+        owner: self, userInfo: nil
+    )
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -150,6 +171,96 @@ private final class CardHostingView: NSHostingView<BreakCard> {
         Corner.allCases.first { gripRect($0).contains(point) }
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        // The break panel never becomes key, even when the pointer is over it.
+        if !trackingAreas.contains(hoverArea) { addTrackingArea(hoverArea) }
+    }
+
+    private func resizeCursor(for corner: Corner) -> NSCursor {
+        let position: NSCursor.FrameResizePosition = switch corner {
+        case .bottomLeft: .bottomLeft
+        case .bottomRight: .bottomRight
+        case .topLeft: .topLeft
+        case .topRight: .topRight
+        }
+        return .frameResize(position: position, directions: .all)
+    }
+
+    // AppKit normally leaves the visible cursor to the foreground app. Resolve
+    // this optional WindowServer property at runtime so dragging still works
+    // if a future macOS version removes it.
+    private static let allowBackgroundCursor: ((Bool) -> Void)? = {
+        typealias ConnectionID = @convention(c) () -> Int32
+        typealias SetProperty = @convention(c) (Int32, Int32, CFString, CFTypeRef) -> Int32
+        guard let quartz = CFBundleGetBundleWithIdentifier("com.apple.CoreGraphics" as CFString),
+              let idSymbol = CFBundleGetFunctionPointerForName(quartz, "CGSMainConnectionID" as CFString),
+              let setSymbol = CFBundleGetFunctionPointerForName(quartz, "CGSSetConnectionProperty" as CFString)
+        else { return nil }
+
+        let connection = unsafeBitCast(idSymbol, to: ConnectionID.self)()
+        let setProperty = unsafeBitCast(setSymbol, to: SetProperty.self)
+        return { enabled in
+            _ = setProperty(connection, connection, "SetsCursorInBackground" as CFString,
+                            enabled ? kCFBooleanTrue : kCFBooleanFalse)
+        }
+    }()
+
+    func releaseCursor() {
+        guard Self.cursorOwner === self else { return }
+        Self.allowBackgroundCursor?(false)
+        Self.cursorOwner = nil
+    }
+
+    func scheduleCursorUpdate() {
+        guard !refreshPending else { return }
+        refreshPending = true
+        // The foreground app can reset the cursor as WindowServer delivers
+        // pointer or geometry changes. Reapply it after that event settles.
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(50)) { [weak self] in
+            self?.refreshCursor()
+        }
+    }
+
+    private func refreshCursor() {
+        refreshPending = false
+        let pointer = NSEvent.mouseLocation
+        guard let window, window.isVisible,
+              NSWindow.windowNumber(at: pointer, belowWindowWithWindowNumber: 0) == window.windowNumber
+        else {
+            releaseCursor()
+            return
+        }
+
+        if Self.cursorOwner !== self {
+            Self.allowBackgroundCursor?(true)
+            Self.cursorOwner = self
+        }
+        let local = convert(window.convertPoint(fromScreen: pointer), from: nil)
+        if let grab, isDragging {
+            (grab.corner.map(resizeCursor) ?? .closedHand).set()
+        } else if let corner = corner(at: local) {
+            resizeCursor(for: corner).set()
+        } else {
+            (containsCard(local) ? NSCursor.openHand : .arrow).set()
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        scheduleCursorUpdate()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        scheduleCursorUpdate()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        if event.trackingArea === hoverArea { releaseCursor() }
+    }
+
     override func mouseDown(with event: NSEvent) {
         guard let window else { return }
         let point = event.locationInWindow
@@ -173,6 +284,7 @@ private final class CardHostingView: NSHostingView<BreakCard> {
         } else {
             window.setFrameOrigin(placement.move(to: grab.frame.offsetBy(dx: delta.dx, dy: delta.dy).origin))
         }
+        scheduleCursorUpdate()
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -181,20 +293,8 @@ private final class CardHostingView: NSHostingView<BreakCard> {
         self.grab = nil
         if !isDragging, grab.corner == nil, window?.isVisible == true, containsCard(convert(event.locationInWindow, from: nil)) {
             rootView.onEndBreak()
-        }
-    }
-
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        addCursorRect(bounds, cursor: .openHand)
-        for corner in Corner.allCases {
-            let position: NSCursor.FrameResizePosition = switch corner {
-            case .bottomLeft: .bottomLeft
-            case .bottomRight: .bottomRight
-            case .topLeft: .topLeft
-            case .topRight: .topRight
-            }
-            addCursorRect(gripRect(corner), cursor: .frameResize(position: position, directions: .all))
+        } else {
+            scheduleCursorUpdate()
         }
     }
 }
