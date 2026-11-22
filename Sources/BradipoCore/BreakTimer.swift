@@ -84,10 +84,8 @@ public struct BreakTimer: Sendable {
                 if remaining == 0 { startBreak(at: now) }
             }
         case .resting:
-            // A person looking away during a break should get the whole break.
-            // If they join a call or close the laptop, clear the visual immediately.
             remaining -= elapsed
-            if remaining <= 0 || activity == .meeting || activity == .unavailable {
+            if remaining <= 0 || activity == .unavailable {
                 restart(at: now)
             }
         }

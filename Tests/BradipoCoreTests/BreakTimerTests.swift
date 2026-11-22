@@ -119,15 +119,33 @@ import Testing
     #expect(timer.remainingSeconds == 120)
 }
 
-@Test(arguments: [ActivityState.meeting, .unavailable])
-func clearsExistingBreakWhenInterrupted(activity: ActivityState) {
+@Test(arguments: [ActivityState.active, .meeting])
+func meetingDuringBreakPreservesItsDeadline(activityAtEnd: ActivityState) {
+    var timer = BreakTimer(workDuration: 60, breakDuration: 20, now: 0)
+    timer.tick(at: 60, activity: .active)
+    timer.tick(at: 68, activity: .meeting)
+    #expect(timer.phase == .resting)
+    #expect(timer.remainingSeconds == 12)
+
+    // A short dictation can end during the break, while a call can outlast it.
+    timer.tick(at: 79, activity: activityAtEnd)
+    #expect(timer.phase == .resting)
+    #expect(timer.remainingSeconds == 1)
+    timer.tick(at: 80, activity: activityAtEnd)
+    #expect(timer.phase == .working)
+    #expect(timer.remainingSeconds == 60)
+    timer.tick(at: 81, activity: activityAtEnd)
+    #expect(timer.remainingSeconds == 59)
+}
+
+@Test func clearsExistingBreakWhenMacBecomesUnavailable() {
     var timer = BreakTimer(workDuration: 20, breakDuration: 10, now: 100)
     timer.startBreak(at: 100)
-    timer.tick(at: 104, activity: activity)
+    timer.tick(at: 104, activity: .unavailable)
     #expect(timer.phase == .working)
     #expect(timer.remainingSeconds == 20)
     timer.tick(at: 108, activity: .active)
-    #expect(timer.remainingSeconds == (activity == .meeting ? 16 : 20))
+    #expect(timer.remainingSeconds == 20)
 }
 
 @Test func resumeRespectsEnvironmentAndSleepResetsWork() {
