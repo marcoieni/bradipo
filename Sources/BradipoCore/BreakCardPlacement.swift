@@ -54,8 +54,6 @@ public struct BreakCardPlacement {
                       width: size.width, height: size.height)
     }
 
-    public var savedOrigin: CGPoint { savedFrame.origin }
-
     public func move(to origin: CGPoint) -> CGPoint {
         let size = savedFrame.size
         let travel = originRange(for: size)
