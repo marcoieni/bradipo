@@ -53,8 +53,17 @@ import Testing
     #expect(defaults.integer(forKey: "workSeconds") == 900)
 }
 
-@Test(arguments: BreakCardPlacement.Corner.allCases)
-func resizeAnchorsTheOppositeCornerAndPersists(corner: BreakCardPlacement.Corner) {
+@Test(arguments: [
+    (BreakCardPlacement.ResizeHandle.left, CGRect(x: -570, y: 340, width: 170, height: 60)),
+    (.right, CGRect(x: -600, y: 340, width: 230, height: 60)),
+    (.bottom, CGRect(x: -600, y: 350, width: 200, height: 50)),
+    (.top, CGRect(x: -600, y: 340, width: 200, height: 70)),
+    (.bottomLeft, CGRect(x: -570, y: 350, width: 170, height: 50)),
+    (.bottomRight, CGRect(x: -600, y: 350, width: 230, height: 50)),
+    (.topLeft, CGRect(x: -570, y: 340, width: 170, height: 70)),
+    (.topRight, CGRect(x: -600, y: 340, width: 230, height: 70)),
+])
+func resizeMovesOnlyTheGrabbedEdgesAndPersists(handle: BreakCardPlacement.ResizeHandle, expected: CGRect) {
     let suite = "bradipo-tests-" + UUID().uuidString
     let defaults = UserDefaults(suiteName: suite)!
     defer { defaults.removePersistentDomain(forName: suite) }
@@ -69,10 +78,9 @@ func resizeAnchorsTheOppositeCornerAndPersists(corner: BreakCardPlacement.Corner
     let card = placement()
     let start = card.savedFrame
     #expect(start == CGRect(x: -600, y: 340, width: 200, height: 60))
-    let delta = CGVector(dx: corner.isLeft ? -100 : 100, dy: corner.isBottom ? -20 : 20)
-    let resized = card.resize(start, from: corner, by: delta)
-    #expect(resized == CGRect(x: start.minX - (corner.isLeft ? 100 : 0),
-                              y: start.minY - (corner.isBottom ? 20 : 0), width: 300, height: 80))
+    // The mouse moves diagonally even on a straight edge, where only one axis should change.
+    let resized = card.resize(start, from: handle, by: CGVector(dx: 30, dy: 10))
+    #expect(resized == expected)
     #expect(placement().savedFrame == resized)
     _ = card.move(to: screen.origin)
     #expect(placement().savedFrame == CGRect(origin: screen.origin, size: resized.size))
