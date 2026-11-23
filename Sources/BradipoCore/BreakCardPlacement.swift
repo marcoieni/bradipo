@@ -41,12 +41,11 @@ public struct BreakCardPlacement {
 
     public var savedFrame: CGRect {
         let values = defaults.array(forKey: key) as? [Double] ?? []
-        // Existing two-value preferences store only the relative position.
-        let hasSize = values.count == 4 && values[2].isFinite && values[2] > 0 && values[3].isFinite && values[3] > 0
-        let requested = hasSize ? CGSize(width: values[2], height: values[3]) : defaultSize
+        let hasSavedFrame = values.count == 4 && values[2...].allSatisfy { $0.isFinite && $0 > 0 }
+        let requested = hasSavedFrame ? CGSize(width: values[2], height: values[3]) : defaultSize
         let size = constrainedSize(requested, maximum: visibleFrame.size)
         let travel = originRange(for: size)
-        if (values.count == 2 || hasSize), (0...1).contains(values[0]), (0...1).contains(values[1]) {
+        if hasSavedFrame, (0...1).contains(values[0]), (0...1).contains(values[1]) {
             return CGRect(x: travel.minX + travel.width * values[0], y: travel.minY + travel.height * values[1],
                           width: size.width, height: size.height)
         }

@@ -73,8 +73,8 @@ func resizeMovesOnlyTheGrabbedEdgesAndPersists(handle: BreakCardPlacement.Resize
         BreakCardPlacement(displayID: display, visibleFrame: screen, cardSize: size, defaults: defaults)
     }
 
-    // Start with a position saved by the move-only version of Bradipo.
-    defaults.set([0.5, 0.5], forKey: "breakCardPosition.external")
+    // Start from a centered position saved earlier on this display.
+    defaults.set([0.5, 0.5, 200.0, 60.0], forKey: "breakCardPosition.external")
     let card = placement()
     let start = card.savedFrame
     #expect(start == CGRect(x: -600, y: 340, width: 200, height: 60))
