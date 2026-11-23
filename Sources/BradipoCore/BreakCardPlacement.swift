@@ -2,11 +2,22 @@ import CoreGraphics
 import Foundation
 
 public struct BreakCardPlacement {
-    public enum Corner: CaseIterable, Sendable {
-        case bottomLeft, bottomRight, topLeft, topRight
+    public enum ResizeHandle: Sendable {
+        case left, right, top, bottom, bottomLeft, bottomRight, topLeft, topRight
 
-        public var isLeft: Bool { self == .bottomLeft || self == .topLeft }
-        public var isBottom: Bool { self == .bottomLeft || self == .bottomRight }
+        // A zero component keeps that dimension fixed during an edge drag.
+        fileprivate var direction: CGVector {
+            switch self {
+            case .left: CGVector(dx: -1, dy: 0)
+            case .right: CGVector(dx: 1, dy: 0)
+            case .top: CGVector(dx: 0, dy: 1)
+            case .bottom: CGVector(dx: 0, dy: -1)
+            case .bottomLeft: CGVector(dx: -1, dy: -1)
+            case .bottomRight: CGVector(dx: 1, dy: -1)
+            case .topLeft: CGVector(dx: -1, dy: 1)
+            case .topRight: CGVector(dx: 1, dy: 1)
+            }
+        }
     }
 
     private static let keyPrefix = "breakCardPosition."
@@ -53,16 +64,19 @@ public struct BreakCardPlacement {
         return save(CGRect(x: x, y: y, width: size.width, height: size.height)).origin
     }
 
-    public func resize(_ frame: CGRect, from corner: Corner, by delta: CGVector) -> CGRect {
-        let anchorX = corner.isLeft ? frame.maxX : frame.minX
-        let anchorY = corner.isBottom ? frame.maxY : frame.minY
-        let maximum = CGSize(width: corner.isLeft ? anchorX - visibleFrame.minX : visibleFrame.maxX - anchorX,
-                             height: corner.isBottom ? anchorY - visibleFrame.minY : visibleFrame.maxY - anchorY)
-        let requested = CGSize(width: frame.width + (corner.isLeft ? -delta.dx : delta.dx),
-                               height: frame.height + (corner.isBottom ? -delta.dy : delta.dy))
+    public func resize(_ frame: CGRect, from handle: ResizeHandle, by delta: CGVector) -> CGRect {
+        let direction = handle.direction
+        let movesLeft = direction.dx < 0
+        let movesBottom = direction.dy < 0
+        let anchorX = movesLeft ? frame.maxX : frame.minX
+        let anchorY = movesBottom ? frame.maxY : frame.minY
+        let maximum = CGSize(width: movesLeft ? anchorX - visibleFrame.minX : visibleFrame.maxX - anchorX,
+                             height: movesBottom ? anchorY - visibleFrame.minY : visibleFrame.maxY - anchorY)
+        let requested = CGSize(width: frame.width + direction.dx * delta.dx,
+                               height: frame.height + direction.dy * delta.dy)
         let size = constrainedSize(requested, maximum: maximum)
-        return save(CGRect(x: corner.isLeft ? anchorX - size.width : anchorX,
-                           y: corner.isBottom ? anchorY - size.height : anchorY,
+        return save(CGRect(x: movesLeft ? anchorX - size.width : anchorX,
+                           y: movesBottom ? anchorY - size.height : anchorY,
                            width: size.width, height: size.height))
     }
 

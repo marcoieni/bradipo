@@ -132,11 +132,11 @@ private final class ReminderPanel: NSPanel {
 }
 
 private final class CardHostingView: NSHostingView<BreakCard> {
-    private typealias Corner = BreakCardPlacement.Corner
+    private typealias ResizeHandle = BreakCardPlacement.ResizeHandle
     private struct Grab {
         let pointer: NSPoint
         let frame: NSRect
-        let corner: Corner?
+        let handle: ResizeHandle?
     }
 
     var placement: BreakCardPlacement?
@@ -151,10 +151,10 @@ private final class CardHostingView: NSHostingView<BreakCard> {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    // Route gestures on the label and corner grips to the same view.
+    // Route gestures on the label and resize border to the same view.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
-        return containsCard(local) || corner(at: local) != nil ? self : nil
+        return containsCard(local) || resizeHandle(at: local) != nil ? self : nil
     }
 
     private func containsCard(_ point: NSPoint) -> Bool {
@@ -162,15 +162,23 @@ private final class CardHostingView: NSHostingView<BreakCard> {
         return NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).contains(point)
     }
 
-    private func gripRect(_ corner: Corner) -> NSRect {
-        let side = min(20, bounds.width / 2, bounds.height / 2)
-        let atMinY = corner.isBottom != isFlipped
-        return NSRect(x: corner.isLeft ? bounds.minX : bounds.maxX - side,
-                      y: atMinY ? bounds.minY : bounds.maxY - side, width: side, height: side)
-    }
+    private func resizeHandle(at point: NSPoint) -> ResizeHandle? {
+        guard bounds.contains(point) else { return nil }
+        let left = point.x - bounds.minX
+        let right = bounds.maxX - point.x
+        let top = isFlipped ? point.y - bounds.minY : bounds.maxY - point.y
+        let bottom = bounds.height - top
 
-    private func corner(at point: NSPoint) -> Corner? {
-        Corner.allCases.first { gripRect($0).contains(point) }
+        // Leave a straight section of each edge available even on the smallest banner.
+        let cornerReach = min(20, bounds.width / 3, bounds.height / 3)
+        if min(left, right) < cornerReach, min(top, bottom) < cornerReach {
+            if left < right { return top < bottom ? .topLeft : .bottomLeft }
+            return top < bottom ? .topRight : .bottomRight
+        }
+        let border: CGFloat = 8
+        if min(left, right) < border { return left < right ? .left : .right }
+        if min(top, bottom) < border { return top < bottom ? .top : .bottom }
+        return nil
     }
 
     override func updateTrackingAreas() {
@@ -179,8 +187,12 @@ private final class CardHostingView: NSHostingView<BreakCard> {
         if !trackingAreas.contains(hoverArea) { addTrackingArea(hoverArea) }
     }
 
-    private func resizeCursor(for corner: Corner) -> NSCursor {
-        let position: NSCursor.FrameResizePosition = switch corner {
+    private func resizeCursor(for handle: ResizeHandle) -> NSCursor {
+        let position: NSCursor.FrameResizePosition = switch handle {
+        case .left: .left
+        case .right: .right
+        case .top: .top
+        case .bottom: .bottom
         case .bottomLeft: .bottomLeft
         case .bottomRight: .bottomRight
         case .topLeft: .topLeft
@@ -240,9 +252,9 @@ private final class CardHostingView: NSHostingView<BreakCard> {
         }
         let local = convert(window.convertPoint(fromScreen: pointer), from: nil)
         if let grab, isDragging {
-            (grab.corner.map(resizeCursor) ?? .closedHand).set()
-        } else if let corner = corner(at: local) {
-            resizeCursor(for: corner).set()
+            (grab.handle.map(resizeCursor) ?? .closedHand).set()
+        } else if let handle = resizeHandle(at: local) {
+            resizeCursor(for: handle).set()
         } else {
             (containsCard(local) ? NSCursor.openHand : .arrow).set()
         }
@@ -267,7 +279,7 @@ private final class CardHostingView: NSHostingView<BreakCard> {
         guard let window else { return }
         let point = event.locationInWindow
         grab = Grab(pointer: window.convertPoint(toScreen: point), frame: window.frame,
-                    corner: corner(at: convert(point, from: nil)))
+                    handle: resizeHandle(at: convert(point, from: nil)))
         isDragging = false
     }
 
@@ -281,8 +293,8 @@ private final class CardHostingView: NSHostingView<BreakCard> {
         let delta = CGVector(dx: pointer.x - grab.pointer.x, dy: pointer.y - grab.pointer.y)
         guard isDragging || hypot(delta.dx, delta.dy) >= 4 else { return }
         isDragging = true
-        if let corner = grab.corner {
-            window.setFrame(placement.resize(grab.frame, from: corner, by: delta), display: true)
+        if let handle = grab.handle {
+            window.setFrame(placement.resize(grab.frame, from: handle, by: delta), display: true)
         } else {
             window.setFrameOrigin(placement.move(to: grab.frame.offsetBy(dx: delta.dx, dy: delta.dy).origin))
         }
@@ -293,7 +305,7 @@ private final class CardHostingView: NSHostingView<BreakCard> {
         guard let grab else { return }
         updateDrag(at: event.locationInWindow)
         self.grab = nil
-        if !isDragging, grab.corner == nil, window?.isVisible == true, containsCard(convert(event.locationInWindow, from: nil)) {
+        if !isDragging, grab.handle == nil, window?.isVisible == true, containsCard(convert(event.locationInWindow, from: nil)) {
             rootView.onEndBreak()
         } else {
             scheduleCursorUpdate()
@@ -339,7 +351,6 @@ private struct BreakCard: View {
     let countdown: BreakCountdown
     let onEndBreak: () -> Void
     var naturalSize: CGSize?
-    private var hover = State(initialValue: false)
 
     private let ink = Color(red: 0.12, green: 0.19, blue: 0.16)
     private let cream = Color(red: 0.97, green: 0.96, blue: 0.89)
@@ -358,27 +369,11 @@ private struct BreakCard: View {
         }
         .background(ink, in: shape)
         .overlay { shape.strokeBorder(cream.opacity(0.24), lineWidth: 1) }
-        .overlay {
-            if hover.wrappedValue {
-                Canvas { context, size in
-                    var grips = Path()
-                    for corner in BreakCardPlacement.Corner.allCases {
-                        let x: CGFloat = corner.isLeft ? 4 : size.width - 4
-                        let y: CGFloat = corner.isBottom ? size.height - 4 : 4
-                        grips.move(to: CGPoint(x: x + (corner.isLeft ? 7 : -7), y: y))
-                        grips.addLine(to: CGPoint(x: x, y: y))
-                        grips.addLine(to: CGPoint(x: x, y: y + (corner.isBottom ? -7 : 7)))
-                    }
-                    context.stroke(grips, with: .color(sage), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                }
-            }
-        }
         // Give the window server a hit target even at the transparent-looking corners.
         .background(Color.black.opacity(0.01))
         .contentShape(Rectangle())
-        .onHover { hover.wrappedValue = $0 }
         .focusable(false)
-        .help("Drag to move, drag a corner to resize, or click to end this break")
+        .help("Drag an edge or corner to resize. Drag the center to move, or click it to end this break.")
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { onEndBreak() }
