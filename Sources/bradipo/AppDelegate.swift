@@ -114,11 +114,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let item = submenu.addItem(withTitle: label, action: action, keyEquivalent: "")
             item.target = self
             item.tag = value
-            item.state = value == current ? .on : .off
         }
+        submenu.addItem(.separator())
+        submenu.addItem(withTitle: "Custom…", action: action, keyEquivalent: "").target = self
+        updateDurationMenu(submenu, seconds: current)
         let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         parent.submenu = submenu
         menu.addItem(parent)
+    }
+
+    private func updateDurationMenu(_ submenu: NSMenu, seconds: Int) {
+        guard let custom = submenu.items.last else { return }
+        let selected = submenu.item(withTag: seconds) ?? custom
+        custom.title = selected === custom ? String(format: "Custom (%d:%02d)…", seconds / 60, seconds % 60) : "Custom…"
+        for item in submenu.items where !item.isSeparatorItem {
+            item.state = item === selected ? .on : .off
+        }
+    }
+
+    private func selectedDuration(_ sender: NSMenuItem, current: Int) -> Int? {
+        guard let submenu = sender.menu else { return nil }
+        let seconds: Int
+        if sender.tag == 0 {
+            let editor = DurationEditor(title: submenu.title, duration: current)
+            guard let duration = editor.run() else { return nil }
+            seconds = duration
+        } else {
+            seconds = sender.tag
+        }
+        updateDurationMenu(submenu, seconds: seconds)
+        return seconds
     }
 
     @objc private func tick() {
@@ -202,21 +227,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func changeWork(_ sender: NSMenuItem) {
-        workSeconds = sender.tag
+        guard let seconds = selectedDuration(sender, current: workSeconds) else { return }
+        workSeconds = seconds
         defaults.set(workSeconds, forKey: "workSeconds")
-        applyDurations(sender)
+        applyDurations()
     }
 
     @objc private func changeBreak(_ sender: NSMenuItem) {
-        breakSeconds = sender.tag
+        guard let seconds = selectedDuration(sender, current: breakSeconds) else { return }
+        breakSeconds = seconds
         defaults.set(breakSeconds, forKey: "breakSeconds")
-        applyDurations(sender)
+        applyDurations()
     }
 
-    private func applyDurations(_ selectedItem: NSMenuItem) {
-        for item in selectedItem.menu?.items ?? [] {
-            item.state = item === selectedItem ? .on : .off
-        }
+    private func applyDurations() {
         clock.configure(workDuration: Double(workSeconds), breakDuration: Double(breakSeconds), at: now)
         tick()
     }
