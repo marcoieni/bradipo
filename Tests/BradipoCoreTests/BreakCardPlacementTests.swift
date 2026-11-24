@@ -15,20 +15,20 @@ import Testing
     }
 
     let card = placement("external", on: screen)
-    #expect(card.savedOrigin == CGPoint(x: -600, y: 102))
+    #expect(card.savedFrame.origin == CGPoint(x: -600, y: 102))
     let drop = CGPoint(x: -800, y: 530)
     #expect(card.move(to: drop) == drop)
-    #expect(placement("external", on: screen).savedOrigin == drop)
-    #expect(placement("built-in", on: screen).savedOrigin == CGPoint(x: -600, y: 102))
+    #expect(placement("external", on: screen).savedFrame.origin == drop)
+    #expect(placement("built-in", on: screen).savedFrame.origin == CGPoint(x: -600, y: 102))
 
     // Keep the quarter-width, three-quarter-height placement after a display rearrangement.
     let changedScreen = CGRect(x: 20, y: -400, width: 600, height: 460)
     let restored = placement("external", on: changedScreen)
-    #expect(restored.savedOrigin == CGPoint(x: 120, y: -100))
+    #expect(restored.savedFrame.origin == CGPoint(x: 120, y: -100))
 
     // Dragging beyond the bottom-right edge should leave the entire card reachable.
     #expect(restored.move(to: CGPoint(x: 900, y: -500)) == CGPoint(x: 420, y: -400))
-    #expect(placement("external", on: changedScreen).savedOrigin == CGPoint(x: 420, y: -400))
+    #expect(placement("external", on: changedScreen).savedFrame.origin == CGPoint(x: 420, y: -400))
 }
 
 @Test func resetRestoresCurrentAndDisconnectedDisplays() {
@@ -73,8 +73,8 @@ func resizeMovesOnlyTheGrabbedEdgesAndPersists(handle: BreakCardPlacement.Resize
         BreakCardPlacement(displayID: display, visibleFrame: screen, cardSize: size, defaults: defaults)
     }
 
-    // Start with a position saved by the move-only version of Bradipo.
-    defaults.set([0.5, 0.5], forKey: "breakCardPosition.external")
+    // Start from a centered position saved earlier on this display.
+    defaults.set([0.5, 0.5, 200.0, 60.0], forKey: "breakCardPosition.external")
     let card = placement()
     let start = card.savedFrame
     #expect(start == CGRect(x: -600, y: 340, width: 200, height: 60))

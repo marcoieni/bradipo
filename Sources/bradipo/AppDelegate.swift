@@ -190,7 +190,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleMeetingDeferral() {
         defaults.set(!deferBreaksDuringMeetings, forKey: "pauseDuringMeetings")
-        meetingItem.state = deferBreaksDuringMeetings ? .on : .off
         tick()
     }
 
