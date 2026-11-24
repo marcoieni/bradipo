@@ -319,24 +319,10 @@ private final class BreakCountdown {
 private let sage = Color(red: 0.63, green: 0.78, blue: 0.61)
 
 private struct ScreenGlow: View {
-    private func glow(toward end: UnitPoint, from start: UnitPoint) -> LinearGradient {
-        LinearGradient(
-            stops: [
-                .init(color: sage.opacity(0.43), location: 0),
-                .init(color: sage.opacity(0.13), location: 0.38),
-                .init(color: .clear, location: 1),
-            ],
-            startPoint: start, endPoint: end
-        )
-    }
-
     var body: some View {
-        Rectangle()
-            .strokeBorder(sage.opacity(0.73), lineWidth: 2)
-            .overlay(alignment: .top) { glow(toward: .bottom, from: .top).frame(height: 44) }
-            .overlay(alignment: .bottom) { glow(toward: .top, from: .bottom).frame(height: 44) }
-            .overlay(alignment: .leading) { glow(toward: .trailing, from: .leading).frame(width: 44) }
-            .overlay(alignment: .trailing) { glow(toward: .leading, from: .trailing).frame(width: 44) }
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .stroke(Color(red: 0.52, green: 0.78, blue: 0.68).opacity(0.52), lineWidth: 22)
+            .blur(radius: 12)
             .ignoresSafeArea()
             .allowsHitTesting(false)
             .accessibilityHidden(true)
