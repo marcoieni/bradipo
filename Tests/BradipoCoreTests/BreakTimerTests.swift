@@ -1,6 +1,25 @@
 import BradipoCore
 import Testing
 
+@Test func countdownWidthFollowsTheStartingDurationOfEachInterval() {
+    var timer = BreakTimer(workDuration: 600, breakDuration: 599, now: 0)
+    #expect(timer.formattedRemainingTime == "10:00")
+    timer.tick(at: 1, activity: .active)
+    #expect(timer.formattedRemainingTime == "09:59")
+    timer.startBreak(at: 1)
+    #expect(timer.formattedRemainingTime == "9:59")
+
+    // New settings apply to future intervals while the active break keeps its original width.
+    timer.configure(workDuration: 300, breakDuration: 600, at: 1)
+    timer.tick(at: 595, activity: .active)
+    #expect(timer.formattedRemainingTime == "0:05")
+    timer.tick(at: 600, activity: .active)
+    #expect(timer.formattedRemainingTime == "5:00")
+    timer.startBreak(at: 600)
+    timer.tick(at: 601, activity: .active)
+    #expect(timer.formattedRemainingTime == "09:59")
+}
+
 @Test func meetingAtDeadlineDefersOneFullBreakUntilRelease() {
     var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
     timer.tick(at: 19, activity: .active)

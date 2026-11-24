@@ -27,9 +27,15 @@ public enum BreakPhase: Equatable, Sendable {
 }
 
 public struct BreakTimer: Sendable {
-    public private(set) var phase: BreakPhase = .working
+    public var phase: BreakPhase { activeBreakDuration == nil ? .working : .resting }
     public private(set) var isManuallyPaused = false
     public var remainingSeconds: Int { Int(ceil(remaining)) }
+    public var formattedRemainingTime: String {
+        let duration = activeBreakDuration ?? workDuration
+        let format = ceil(duration) < 10 * 60 ? "%d:%02d" : "%02d:%02d"
+        let seconds = remainingSeconds
+        return String(format: format, seconds / 60, seconds % 60)
+    }
     public var timeUntilNextDisplayedSecond: TimeInterval { remaining - Double(remainingSeconds - 1) }
     public var pauseReason: PauseReason? {
         guard phase == .working else { return nil }
@@ -48,6 +54,7 @@ public struct BreakTimer: Sendable {
 
     private var workDuration: TimeInterval
     private var breakDuration: TimeInterval
+    private var activeBreakDuration: TimeInterval?
     private var remaining: TimeInterval
     private var lastTick: TimeInterval
     private var activity: ActivityState = .active
@@ -92,7 +99,7 @@ public struct BreakTimer: Sendable {
     }
 
     public mutating func restart(at now: TimeInterval) {
-        phase = .working
+        activeBreakDuration = nil
         remaining = workDuration
         isManuallyPaused = false
         lastTick = now
@@ -107,7 +114,7 @@ public struct BreakTimer: Sendable {
     public mutating func startBreak(at now: TimeInterval) {
         // Assistive input can activate the menu without resetting macOS's idle clock.
         guard canStartBreak else { return }
-        phase = .resting
+        activeBreakDuration = breakDuration
         remaining = breakDuration
         lastTick = now
     }
