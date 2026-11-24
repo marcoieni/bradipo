@@ -23,14 +23,14 @@ final class BreakOverlay: NSObject {
         )
     }
 
-    func show(secondsRemaining: Int) {
+    func show(timer: BreakTimer) {
         if let countdown {
-            countdown.seconds = secondsRemaining
+            countdown.timer = timer
             // Another app can change the cursor without moving the pointer.
             refreshBannerCursor()
             return
         }
-        countdown = BreakCountdown(seconds: secondsRemaining)
+        countdown = BreakCountdown(timer: timer)
         showOnAllDisplays(animated: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
 
@@ -315,8 +315,8 @@ private final class CardHostingView: NSHostingView<BreakCard> {
 
 @Observable @MainActor
 private final class BreakCountdown {
-    var seconds: Int
-    init(seconds: Int) { self.seconds = seconds }
+    var timer: BreakTimer
+    init(timer: BreakTimer) { self.timer = timer }
 }
 
 private let sage = Color(red: 0.63, green: 0.78, blue: 0.61)
@@ -378,7 +378,7 @@ private struct BreakCard: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { onEndBreak() }
         .accessibilityLabel("End break")
-        .accessibilityValue("\(countdown.seconds) seconds remaining")
+        .accessibilityValue("\(countdown.timer.remainingSeconds) seconds remaining")
     }
 
     private var label: some View {
@@ -397,7 +397,7 @@ private struct BreakCard: View {
             Rectangle()
                 .fill(sage.opacity(0.40))
                 .frame(width: 1, height: 18)
-            Text(verbatim: String(format: "%02d:%02d", countdown.seconds / 60, countdown.seconds % 60))
+            Text(verbatim: countdown.timer.formattedRemainingTime)
                 .font(.system(size: 14, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color(red: 0.80, green: 0.87, blue: 0.71))
         }

@@ -135,8 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func render() {
-        let seconds = clock.remainingSeconds
-        let time = String(format: "%02d:%02d", seconds / 60, seconds % 60)
+        let time = clock.formattedRemainingTime
         let resting = clock.phase == .resting
         let reason: String? = switch clock.pauseReason {
         case .manual: "Reminders paused"
@@ -159,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pause.isEnabled = !resting
         pause.title = clock.isManuallyPaused ? "Resume Reminders" : "Pause Reminders"
         if resting {
-            overlay.show(secondsRemaining: seconds)
+            overlay.show(timer: clock)
         } else {
             overlay.hide()
         }
