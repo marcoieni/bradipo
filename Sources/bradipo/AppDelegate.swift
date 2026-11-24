@@ -50,13 +50,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func buildMenu() {
         menu.delegate = self
         menu.autoenablesItems = false
-        let header = NSMenuItem.sectionHeader(title: "bradipo")
-        if let url = Bundle.main.url(forResource: "Sloth", withExtension: "png"),
-           let image = NSImage(contentsOf: url) {
-            image.size = NSSize(width: 21, height: 19)
-            header.image = image
-        }
-        menu.addItem(header)
         pauseStatus.isEnabled = false
         menu.addItem(pauseStatus)
 
