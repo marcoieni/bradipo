@@ -151,15 +151,9 @@ private final class CardHostingView: NSHostingView<BreakCard> {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    // Route gestures on the label and resize border to the same view.
+    // Route every click on the banner, label and resize border alike, to this view.
     override func hitTest(_ point: NSPoint) -> NSView? {
-        let local = convert(point, from: superview)
-        return containsCard(local) || resizeHandle(at: local) != nil ? self : nil
-    }
-
-    private func containsCard(_ point: NSPoint) -> Bool {
-        let radius = min(29, bounds.height / 2)
-        return NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).contains(point)
+        bounds.contains(convert(point, from: superview)) ? self : nil
     }
 
     private func resizeHandle(at point: NSPoint) -> ResizeHandle? {
@@ -170,6 +164,9 @@ private final class CardHostingView: NSHostingView<BreakCard> {
         let bottom = bounds.height - top
 
         // Leave a straight section of each edge available even on the smallest banner.
+        // The corner zones and the 8 pt edge bands cover BreakCard's 29 pt rounded corners, so every
+        // point in bounds is either the card or a resize handle. The open-hand cursor and the click
+        // that ends a break in mouseUp rely on that.
         let cornerReach = min(20, bounds.width / 3, bounds.height / 3)
         if min(left, right) < cornerReach, min(top, bottom) < cornerReach {
             if left < right { return top < bottom ? .topLeft : .bottomLeft }
@@ -256,7 +253,7 @@ private final class CardHostingView: NSHostingView<BreakCard> {
         } else if let handle = resizeHandle(at: local) {
             resizeCursor(for: handle).set()
         } else {
-            (containsCard(local) ? NSCursor.openHand : .arrow).set()
+            NSCursor.openHand.set()
         }
     }
 
@@ -305,7 +302,7 @@ private final class CardHostingView: NSHostingView<BreakCard> {
         guard let grab else { return }
         updateDrag(at: event.locationInWindow)
         self.grab = nil
-        if !isDragging, grab.handle == nil, window?.isVisible == true, containsCard(convert(event.locationInWindow, from: nil)) {
+        if !isDragging, grab.handle == nil, window?.isVisible == true, bounds.contains(convert(event.locationInWindow, from: nil)) {
             rootView.onEndBreak()
         } else {
             scheduleCursorUpdate()
