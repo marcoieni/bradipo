@@ -10,7 +10,6 @@ final class LoginItem: NSObject {
         super.init()
         menuItem.target = self
         menuItem.action = #selector(toggle)
-        refresh()
     }
 
     func refresh() {
@@ -24,7 +23,6 @@ final class LoginItem: NSObject {
     }
 
     @objc private func toggle() {
-        defer { refresh() }
         let status = service.status
         do {
             if status == .enabled {

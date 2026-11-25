@@ -9,8 +9,6 @@ final class BreakOverlay: NSObject {
     private var panels: [ReminderPanel] = []
     private var countdown: BreakCountdown?
     private let onEndBreak: () -> Void
-    private lazy var sloth = Bundle.main.url(forResource: "Sloth", withExtension: "png")
-        .flatMap(NSImage.init(contentsOf:))
 
     init(onEndBreak: @escaping () -> Void) {
         self.onEndBreak = onEndBreak
@@ -62,9 +60,7 @@ final class BreakOverlay: NSObject {
             // through the full-screen glow directly to the application underneath.
             let glow = ReminderPanel(content: NSHostingView(rootView: ScreenGlow()),
                                      frame: screen.frame, receivesClicks: false)
-            let card = CardHostingView(rootView: BreakCard(
-                sloth: sloth, countdown: countdown, onEndBreak: onEndBreak
-            ))
+            let card = CardHostingView(rootView: BreakCard(countdown: countdown, onEndBreak: onEndBreak))
             let size = card.fittingSize
             let displayID = screen.cgDirectDisplayID.flatMap { CGDisplayCreateUUIDFromDisplayID($0) }
                 .map { CFUUIDCreateString(nil, $0.takeRetainedValue()) as String } ?? screen.localizedName
@@ -119,7 +115,6 @@ private final class ReminderPanel: NSPanel {
         } else {
             setAccessibilityElement(false)
         }
-        isExcludedFromWindowsMenu = true
         animationBehavior = .none
         level = .floating
         collectionBehavior = [
@@ -316,8 +311,6 @@ private final class BreakCountdown {
     init(timer: BreakTimer) { self.timer = timer }
 }
 
-private let sage = Color(red: 0.63, green: 0.78, blue: 0.61)
-
 private struct ScreenGlow: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -330,13 +323,14 @@ private struct ScreenGlow: View {
 }
 
 private struct BreakCard: View {
-    let sloth: NSImage?
     let countdown: BreakCountdown
     let onEndBreak: () -> Void
     var naturalSize: CGSize?
 
+    private static let sloth = NSImage(named: "Sloth.png")
     private let ink = Color(red: 0.12, green: 0.19, blue: 0.16)
     private let cream = Color(red: 0.97, green: 0.96, blue: 0.89)
+    private let sage = Color(red: 0.63, green: 0.78, blue: 0.61)
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 29)
@@ -355,7 +349,6 @@ private struct BreakCard: View {
         // Give the window server a hit target even at the transparent-looking corners.
         .background(Color.black.opacity(0.01))
         .contentShape(Rectangle())
-        .focusable(false)
         .help("Drag an edge or corner to resize. Drag the center to move, or click it to end this break.")
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
@@ -366,7 +359,7 @@ private struct BreakCard: View {
 
     private var label: some View {
         HStack(spacing: 12) {
-            if let sloth {
+            if let sloth = Self.sloth {
                 Image(nsImage: sloth)
                     .resizable()
                     .scaledToFit()
@@ -384,7 +377,7 @@ private struct BreakCard: View {
                 .font(.system(size: 14, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color(red: 0.80, green: 0.87, blue: 0.71))
         }
-        .padding(.leading, sloth == nil ? 20 : 8)
+        .padding(.leading, Self.sloth == nil ? 20 : 8)
         .padding(.trailing, 20)
         .frame(height: 58)
         .fixedSize()
