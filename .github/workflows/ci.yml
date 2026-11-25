@@ -31,3 +31,15 @@ jobs:
       # Stamp a version like release.yml does, so that path runs before a tag.
       - run: ./scripts/build-app.sh 0.0.0
       - run: ./scripts/package-dmg.sh
+      - run: ./scripts/package-tarball.sh
+      # Install the archive like the README's Terminal command, which only avoids
+      # the Gatekeeper block if curl's downloads aren't quarantined.
+      - name: Install from the archive
+        run: |
+          curl -f "file://$PWD/.build/bradipo.tar.gz" -o "$TMPDIR/bradipo.tar.gz"
+          tar -xzf "$TMPDIR/bradipo.tar.gz" -C /Applications
+          codesign --verify --strict /Applications/bradipo.app
+          if xattr -p com.apple.quarantine /Applications/bradipo.app; then
+            echo "::error::The installed app is quarantined"
+            exit 1
+          fi
