@@ -4,7 +4,7 @@
 
 bradipo is a menu-bar break reminder for macOS. A monospaced countdown keeps its place in the bar. Every 20 minutes, a soft green glow frames each display and a sleeping sloth invites you to rest your eyes for 20 seconds. You can keep typing or clicking elsewhere on the screen. Drag the center of the sloth card to move it. Drag an edge to change its width or height, or a corner to change both. Bradipo remembers its size and position on each display for future breaks. Click the center to end the break early and start a fresh work interval.
 
-Click the countdown to start a break, pause reminders, or restart the timer. Under **Work interval** or **Break length**, choose a preset or select **Custom…** to enter minutes and seconds. Choose **Reset Banner Size and Position** to restore the original size and bottom-center position on every display. During a break, choose **Stop break** to start a fresh work interval. Choose **Launch at Login** to have macOS open bradipo when you sign in. **About bradipo** shows the installed version.
+Click the countdown to start a break, pause reminders, or restart the timer. Under **Work interval** or **Break length**, choose a preset or select **Custom…** to enter minutes and seconds. Choose **Reset Banner Size and Position** to restore the original size and bottom-center position on every display. During a break, choose **Stop break** to start a fresh work interval. Choose **Launch at Login** to have macOS open bradipo when you sign in. **About bradipo** shows the installed version. **Check for Updates…** offers to install the latest release from GitHub and relaunch bradipo; bradipo never checks on its own.
 
 <br clear="right">
 
@@ -24,9 +24,9 @@ curl -fL https://github.com/marcoieni/bradipo/releases/latest/download/bradipo.t
   tar -xzf "$TMPDIR/bradipo.tar.gz" -C /Applications
 ```
 
-Then open bradipo from Applications. To update, quit bradipo and run the command again.
+Then open bradipo from Applications. To update, choose **Check for Updates…** in the menu, or quit bradipo and run the command again.
 
-Releases aren't notarized by Apple, so macOS blocks copies downloaded with a browser until you allow them. Files downloaded with `curl` aren't quarantined, so macOS skips that check. Run the command only if you trust this repository.
+Releases aren't notarized by Apple, so macOS blocks copies downloaded with a browser until you allow them. Files downloaded with `curl` or **Check for Updates…** aren't quarantined, so macOS skips that check. Install and update this way only if you trust this repository.
 
 #### Install from the disk image
 
@@ -38,7 +38,7 @@ macOS blocks bradipo the first time you open each newly downloaded version. In t
 xattr -dr com.apple.quarantine /Applications/bradipo.app
 ```
 
-If your copy came from anywhere else, move it to the Trash and download it again from the Releases page. Every update is a new download, so allow each new version the same way.
+If your copy came from anywhere else, move it to the Trash and download it again from the Releases page. If you update from a new disk image, allow that version the same way. Versions installed with **Check for Updates…** don't need this step.
 
 ### Build and run
 
@@ -68,6 +68,6 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-The release workflow runs the tests, builds bradipo with the tag's version, and publishes `bradipo-0.2.0.dmg` and `bradipo.tar.gz` on a GitHub release for the tag. The archive is for the Terminal command in [Install](#install), so its name stays the same in every release. You don't need to edit `Resources/Info.plist`; its version only applies to local builds. To package a local build the same way, run `./scripts/build-app.sh 0.2.0`, then `./scripts/package-dmg.sh` and `./scripts/package-tarball.sh`.
+The release workflow runs the tests, builds bradipo with the tag's version, and publishes `bradipo-0.2.0.dmg` and `bradipo.tar.gz` on a GitHub release for the tag. The archive is for the Terminal command in [Install](#install) and **Check for Updates…**, so its name stays the same in every release. You don't need to edit `Resources/Info.plist`; its version only applies to local builds. To package a local build the same way, run `./scripts/build-app.sh 0.2.0`, then `./scripts/package-dmg.sh` and `./scripts/package-tarball.sh`.
 
 Releases are signed ad hoc and not notarized, which is why users of the disk image need the Gatekeeper step in [Install from the disk image](#install-from-the-disk-image). Notarizing requires a paid Apple Developer ID.
