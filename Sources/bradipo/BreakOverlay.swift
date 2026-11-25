@@ -115,7 +115,6 @@ private final class ReminderPanel: NSPanel {
         } else {
             setAccessibilityElement(false)
         }
-        isExcludedFromWindowsMenu = true
         animationBehavior = .none
         level = .floating
         collectionBehavior = [
@@ -312,8 +311,6 @@ private final class BreakCountdown {
     init(timer: BreakTimer) { self.timer = timer }
 }
 
-private let sage = Color(red: 0.63, green: 0.78, blue: 0.61)
-
 private struct ScreenGlow: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -333,6 +330,7 @@ private struct BreakCard: View {
     private static let sloth = NSImage(named: "Sloth.png")
     private let ink = Color(red: 0.12, green: 0.19, blue: 0.16)
     private let cream = Color(red: 0.97, green: 0.96, blue: 0.89)
+    private let sage = Color(red: 0.63, green: 0.78, blue: 0.61)
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 29)
@@ -351,7 +349,6 @@ private struct BreakCard: View {
         // Give the window server a hit target even at the transparent-looking corners.
         .background(Color.black.opacity(0.01))
         .contentShape(Rectangle())
-        .focusable(false)
         .help("Drag an edge or corner to resize. Drag the center to move, or click it to end this break.")
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
