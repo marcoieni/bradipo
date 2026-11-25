@@ -34,4 +34,50 @@ jobs:
           gh release create "$GITHUB_REF_NAME" ".build/bradipo-${GITHUB_REF_NAME#v}.dmg" .build/bradipo.tar.gz \
             --verify-tag \
             --generate-notes \
-            --notes "Install or update bradipo with the Terminal command in [Install](https://github.com/$GH_REPO#install). Builds are not notarized, so if you use the disk image instead, see [Install from the disk image](https://github.com/$GH_REPO#install-from-the-disk-image) before the first launch."
+            --notes "Install or update bradipo with the Terminal command or Homebrew as described in [Install](https://github.com/$GH_REPO#install). Builds are not notarized, so if you use Homebrew or the disk image, see [Allow bradipo to open](https://github.com/$GH_REPO#allow-bradipo-to-open) before the first launch."
+
+  cask:
+    name: Update the Homebrew cask
+    # A separate job, because re-running the release job would fail on the
+    # release that already exists.
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # push the updated cask to main
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Homebrew reads the cask from main, which may be ahead of the tag.
+          ref: main
+          persist-credentials: false
+      - name: Update the Homebrew cask
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cask=Casks/bradipo.rb
+          version=${GITHUB_REF_NAME#v}
+          current=$(grep -Po '^  version "\K[^"]+' "$cask")
+          if [ "$(printf '%s\n' "$current" "$version" | sort -V | tail -n 1)" != "$version" ]; then
+            echo "Not downgrading the cask from $current to $version"
+            exit 0
+          fi
+
+          sha256=$(gh release view "$GITHUB_REF_NAME" --json assets \
+            --jq ".assets[] | select(.name == \"bradipo-$version.dmg\") | .digest | ltrimstr(\"sha256:\")")
+          sed -i -E "s/^  version .*/  version \"$version\"/; s/^  sha256 \"[0-9a-f]{64}\"\$/  sha256 \"$sha256\"/" "$cask"
+          # An empty digest or a sed that matched nothing must not reach main.
+          if ! grep -Eq '^  sha256 "[0-9a-f]{64}"$' "$cask"; then
+            echo "::error::$cask doesn't hold the published checksum"
+            exit 1
+          fi
+          # A re-run may find the cask already updated.
+          if git diff --quiet "$cask"; then
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update the Homebrew cask to $version" "$cask"
+          gh auth setup-git
+          git push origin main

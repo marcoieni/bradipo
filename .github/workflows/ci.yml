@@ -43,3 +43,22 @@ jobs:
             echo "::error::The installed app is quarantined"
             exit 1
           fi
+
+  cask:
+    name: Homebrew cask
+    # Like the app, the cask requires macOS 27. See build for the runner choice.
+    runs-on: xcode-27
+    timeout-minutes: 15
+    env:
+      # Use the image's Homebrew as it is, because updating it is slow.
+      HOMEBREW_NO_AUTO_UPDATE: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: brew style Casks/bradipo.rb
+      # Install like the README does, but with this checkout as the tap. The cask
+      # points to a published release, so this doesn't install the app built above.
+      - run: brew tap marcoieni/bradipo "$PWD"
+      - run: brew install --cask marcoieni/bradipo/bradipo
+      - run: brew uninstall --cask --zap bradipo
