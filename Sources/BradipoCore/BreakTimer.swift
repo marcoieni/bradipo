@@ -29,6 +29,8 @@ public enum BreakPhase: Equatable, Sendable {
 public struct BreakTimer: Sendable {
     public var phase: BreakPhase { activeBreakDuration == nil ? .working : .resting }
     public private(set) var isManuallyPaused = false
+    public private(set) var workDuration: TimeInterval
+    public private(set) var breakDuration: TimeInterval
     public var remainingSeconds: Int { Int(ceil(remaining)) }
     public var formattedRemainingTime: String {
         let duration = activeBreakDuration ?? workDuration
@@ -52,8 +54,6 @@ public struct BreakTimer: Sendable {
         phase == .working && !isManuallyPaused && activity != .meeting && activity != .unavailable
     }
 
-    private var workDuration: TimeInterval
-    private var breakDuration: TimeInterval
     private var activeBreakDuration: TimeInterval?
     private var remaining: TimeInterval
     private var lastTick: TimeInterval
