@@ -132,15 +132,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func selectedDuration(_ sender: NSMenuItem, current: TimeInterval) -> Int? {
         guard let submenu = sender.menu else { return nil }
-        let seconds: Int
-        if sender.tag == 0 {
-            let editor = DurationEditor(title: submenu.title, duration: Int(current))
-            guard let duration = editor.run() else { return nil }
-            seconds = duration
-        } else {
-            seconds = sender.tag
-        }
-        updateDurationMenu(submenu, seconds: seconds)
+        let isCustom = sender.tag == 0
+        let seconds = isCustom ? DurationEditor(title: submenu.title, duration: Int(current)).run() : sender.tag
+        if let seconds { updateDurationMenu(submenu, seconds: seconds) }
         return seconds
     }
 
