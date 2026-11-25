@@ -16,9 +16,23 @@ Click the countdown to start a break, pause reminders, or restart the timer. Und
 
 ### Install
 
-bradipo requires macOS 27.2.1 or later. Download `bradipo-<version>.dmg` from the [latest release](https://github.com/marcoieni/bradipo/releases/latest), open it, and drag bradipo into Applications.
+bradipo requires macOS 27.2.1 or later. To install the latest release, run this in Terminal:
 
-Releases aren't notarized by Apple, so macOS blocks bradipo the first time you open each newly downloaded version. In the warning, click **Done**, not **Move to Trash**. Then open **System Settings > Privacy & Security**, click **Open Anyway** next to the message about bradipo, and confirm. If macOS instead reports that bradipo is damaged and you downloaded it from this repository's [Releases](https://github.com/marcoieni/bradipo/releases) page, remove the download quarantine in Terminal:
+```sh
+curl -fL https://github.com/marcoieni/bradipo/releases/latest/download/bradipo.tar.gz -o "$TMPDIR/bradipo.tar.gz" &&
+  rm -rf /Applications/bradipo.app &&
+  tar -xzf "$TMPDIR/bradipo.tar.gz" -C /Applications
+```
+
+Then open bradipo from Applications. To update, quit bradipo and run the command again.
+
+Releases aren't notarized by Apple, so macOS blocks copies downloaded with a browser until you allow them. Files downloaded with `curl` aren't quarantined, so macOS skips that check. Run the command only if you trust this repository.
+
+#### Install from the disk image
+
+Download `bradipo-<version>.dmg` from the [latest release](https://github.com/marcoieni/bradipo/releases/latest), open it, and drag bradipo into Applications.
+
+macOS blocks bradipo the first time you open each newly downloaded version. In the warning, click **Done**, not **Move to Trash**. Then open **System Settings > Privacy & Security**, click **Open Anyway** next to the message about bradipo, and confirm. If macOS instead reports that bradipo is damaged and you downloaded it from this repository's [Releases](https://github.com/marcoieni/bradipo/releases) page, remove the download quarantine in Terminal:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/bradipo.app
@@ -54,6 +68,6 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-The release workflow runs the tests, builds bradipo with the tag's version, and publishes `bradipo-0.2.0.dmg` on a GitHub release for the tag. You don't need to edit `Resources/Info.plist`; its version only applies to local builds. To package a local build the same way, run `./scripts/build-app.sh 0.2.0` and then `./scripts/package-dmg.sh`.
+The release workflow runs the tests, builds bradipo with the tag's version, and publishes `bradipo-0.2.0.dmg` and `bradipo.tar.gz` on a GitHub release for the tag. The archive is for the Terminal command in [Install](#install), so its name stays the same in every release. You don't need to edit `Resources/Info.plist`; its version only applies to local builds. To package a local build the same way, run `./scripts/build-app.sh 0.2.0`, then `./scripts/package-dmg.sh` and `./scripts/package-tarball.sh`.
 
-Releases are signed ad hoc and not notarized, which is why users need the Gatekeeper step in [Install](#install). Notarizing requires a paid Apple Developer ID.
+Releases are signed ad hoc and not notarized, which is why users of the disk image need the Gatekeeper step in [Install from the disk image](#install-from-the-disk-image). Notarizing requires a paid Apple Developer ID.

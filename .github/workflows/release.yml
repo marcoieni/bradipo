@@ -15,7 +15,7 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 30
     permissions:
-      contents: write # create the release and upload the disk image
+      contents: write # create the release and upload its files
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
@@ -25,12 +25,13 @@ jobs:
       - run: swift test
       - run: ./scripts/build-app.sh "${GITHUB_REF_NAME#v}"
       - run: ./scripts/package-dmg.sh
-      - name: Publish the disk image
+      - run: ./scripts/package-tarball.sh
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release create "$GITHUB_REF_NAME" ".build/bradipo-${GITHUB_REF_NAME#v}.dmg" \
+          gh release create "$GITHUB_REF_NAME" ".build/bradipo-${GITHUB_REF_NAME#v}.dmg" .build/bradipo.tar.gz \
             --verify-tag \
             --generate-notes \
-            --notes "Open the disk image and drag bradipo into Applications. Builds are not notarized, so see [Install](https://github.com/$GH_REPO#install) before the first launch."
+            --notes "Install or update bradipo with the Terminal command in [Install](https://github.com/$GH_REPO#install). Builds are not notarized, so if you use the disk image instead, see [Install from the disk image](https://github.com/$GH_REPO#install-from-the-disk-image) before the first launch."
