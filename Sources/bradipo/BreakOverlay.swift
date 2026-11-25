@@ -9,8 +9,6 @@ final class BreakOverlay: NSObject {
     private var panels: [ReminderPanel] = []
     private var countdown: BreakCountdown?
     private let onEndBreak: () -> Void
-    private lazy var sloth = Bundle.main.url(forResource: "Sloth", withExtension: "png")
-        .flatMap(NSImage.init(contentsOf:))
 
     init(onEndBreak: @escaping () -> Void) {
         self.onEndBreak = onEndBreak
@@ -62,9 +60,7 @@ final class BreakOverlay: NSObject {
             // through the full-screen glow directly to the application underneath.
             let glow = ReminderPanel(content: NSHostingView(rootView: ScreenGlow()),
                                      frame: screen.frame, receivesClicks: false)
-            let card = CardHostingView(rootView: BreakCard(
-                sloth: sloth, countdown: countdown, onEndBreak: onEndBreak
-            ))
+            let card = CardHostingView(rootView: BreakCard(countdown: countdown, onEndBreak: onEndBreak))
             let size = card.fittingSize
             let displayID = screen.cgDirectDisplayID.flatMap { CGDisplayCreateUUIDFromDisplayID($0) }
                 .map { CFUUIDCreateString(nil, $0.takeRetainedValue()) as String } ?? screen.localizedName
@@ -330,11 +326,11 @@ private struct ScreenGlow: View {
 }
 
 private struct BreakCard: View {
-    let sloth: NSImage?
     let countdown: BreakCountdown
     let onEndBreak: () -> Void
     var naturalSize: CGSize?
 
+    private static let sloth = NSImage(named: "Sloth.png")
     private let ink = Color(red: 0.12, green: 0.19, blue: 0.16)
     private let cream = Color(red: 0.97, green: 0.96, blue: 0.89)
 
@@ -366,7 +362,7 @@ private struct BreakCard: View {
 
     private var label: some View {
         HStack(spacing: 12) {
-            if let sloth {
+            if let sloth = Self.sloth {
                 Image(nsImage: sloth)
                     .resizable()
                     .scaledToFit()
@@ -384,7 +380,7 @@ private struct BreakCard: View {
                 .font(.system(size: 14, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color(red: 0.80, green: 0.87, blue: 0.71))
         }
-        .padding(.leading, sloth == nil ? 20 : 8)
+        .padding(.leading, Self.sloth == nil ? 20 : 8)
         .padding(.trailing, 20)
         .frame(height: 58)
         .fixedSize()
