@@ -33,13 +33,12 @@ Releases aren't notarized by Apple, so macOS blocks copies downloaded with a bro
 If bradipo is already in Applications and you installed it without Homebrew, quit it and move it to the Trash first. You keep your intervals, banner size and position, and meetings setting. Then run:
 
 ```sh
-brew tap marcoieni/bradipo https://github.com/marcoieni/bradipo
-brew install --cask marcoieni/bradipo/bradipo
+brew install --cask marcoieni/tap/bradipo
 ```
 
-Installing by the full name makes Homebrew trust only this cask, so you don't need `brew trust`. Homebrew quarantines what it downloads, so [allow bradipo to open](#allow-bradipo-to-open) after you install or upgrade it.
+Homebrew quarantines what it downloads, so [allow bradipo to open](#allow-bradipo-to-open) after you install or upgrade it.
 
-To update, run `brew upgrade --cask marcoieni/bradipo/bradipo`. With the short name, Homebrew can take a day to notice a new release. To uninstall, run `brew uninstall --cask bradipo`, or add `--zap` to delete your intervals, banner size and position, and meetings setting too.
+To update, run `brew upgrade --cask marcoieni/tap/bradipo`. With the short name, Homebrew can take a day to notice a new release. To uninstall, run `brew uninstall --cask bradipo`, or add `--zap` to delete your intervals, banner size and position, and meetings setting too.
 
 #### Install from the disk image
 
@@ -85,6 +84,6 @@ git push origin v0.2.0
 
 The release workflow runs the tests, builds bradipo with the tag's version, and publishes `bradipo-0.2.0.dmg` and `bradipo.tar.gz` on a GitHub release for the tag. The archive is for the Terminal command in [Install](#install), so its name stays the same in every release. You don't need to edit `Resources/Info.plist`; its version only applies to local builds. To package a local build the same way, run `./scripts/build-app.sh 0.2.0`, then `./scripts/package-dmg.sh` and `./scripts/package-tarball.sh`.
 
-This repository is also the Homebrew tap. After publishing, the **Update the Homebrew cask** job commits the new version and the checksum of the disk image to `Casks/bradipo.rb` on `main`. If that job fails, for example because `main` moved in the meantime, re-run only the failed job.
+The cask lives in [marcoieni/homebrew-tap](https://github.com/marcoieni/homebrew-tap). After publishing, the **Update the Homebrew cask** job commits the new version and the checksum of the disk image there. It pushes with the `HOMEBREW_TAP_DEPLOY_KEY` secret, the private half of a deploy key with write access to the tap. If that job fails, re-run only the failed job.
 
 Releases are signed ad hoc and not notarized, which is why users of Homebrew and the disk image need the Gatekeeper step in [Allow bradipo to open](#allow-bradipo-to-open). Notarizing requires a paid Apple Developer ID.
