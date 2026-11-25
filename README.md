@@ -36,17 +36,15 @@ If bradipo is already in Applications and you installed it without Homebrew, qui
 brew install --cask marcoieni/tap/bradipo
 ```
 
-Homebrew quarantines what it downloads, so [allow bradipo to open](#allow-bradipo-to-open) after you install or upgrade it.
+The cask removes the quarantine that Homebrew adds, so macOS skips its check, as it does with the Terminal command. Install it only if you trust this repository and [the tap](https://github.com/marcoieni/homebrew-tap).
 
 To update, run `brew upgrade --cask marcoieni/tap/bradipo`. With the short name, Homebrew can take a day to notice a new release. To uninstall, run `brew uninstall --cask bradipo`, or add `--zap` to delete your intervals, banner size and position, and meetings setting too.
 
 #### Install from the disk image
 
-Download `bradipo-<version>.dmg` from the [latest release](https://github.com/marcoieni/bradipo/releases/latest), open it, and drag bradipo into Applications. Then [allow it to open](#allow-bradipo-to-open).
+Download `bradipo-<version>.dmg` from the [latest release](https://github.com/marcoieni/bradipo/releases/latest), open it, and drag bradipo into Applications.
 
-#### Allow bradipo to open
-
-If you install with Homebrew or from the disk image, macOS blocks bradipo the first time you open each newly downloaded version. In the warning, click **Done**, not **Move to Trash**. Then open **System Settings > Privacy & Security**, click **Open Anyway** next to the message about bradipo, and confirm. If macOS instead reports that bradipo is damaged and you installed it with Homebrew or downloaded it from this repository's [Releases](https://github.com/marcoieni/bradipo/releases) page, remove the download quarantine in Terminal:
+macOS blocks bradipo the first time you open each newly downloaded version. In the warning, click **Done**, not **Move to Trash**. Then open **System Settings > Privacy & Security**, click **Open Anyway** next to the message about bradipo, and confirm. If macOS instead reports that bradipo is damaged and you downloaded it from this repository's [Releases](https://github.com/marcoieni/bradipo/releases) page, remove the download quarantine in Terminal:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/bradipo.app
@@ -86,4 +84,4 @@ The release workflow runs the tests, builds bradipo with the tag's version, and 
 
 The cask lives in [marcoieni/homebrew-tap](https://github.com/marcoieni/homebrew-tap). After publishing, the **Update the Homebrew cask** job commits the new version and the checksum of the disk image there. It pushes with the `HOMEBREW_TAP_DEPLOY_KEY` secret, the private half of a deploy key with write access to the tap. If that job fails, re-run only the failed job.
 
-Releases are signed ad hoc and not notarized, which is why users of Homebrew and the disk image need the Gatekeeper step in [Allow bradipo to open](#allow-bradipo-to-open). Notarizing requires a paid Apple Developer ID.
+Releases are signed ad hoc and not notarized, which is why users of the disk image need the Gatekeeper step in [Install from the disk image](#install-from-the-disk-image). Notarizing requires a paid Apple Developer ID.

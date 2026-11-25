@@ -34,7 +34,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" ".build/bradipo-${GITHUB_REF_NAME#v}.dmg" .build/bradipo.tar.gz \
             --verify-tag \
             --generate-notes \
-            --notes "Install or update bradipo with the Terminal command or Homebrew as described in [Install](https://github.com/$GH_REPO#install). Builds are not notarized, so if you use Homebrew or the disk image, see [Allow bradipo to open](https://github.com/$GH_REPO#allow-bradipo-to-open) before the first launch."
+            --notes "Install or update bradipo with the Terminal command or Homebrew as described in [Install](https://github.com/$GH_REPO#install). Builds are not notarized, so if you use the disk image instead, see [Install from the disk image](https://github.com/$GH_REPO#install-from-the-disk-image) before the first launch."
 
   cask:
     name: Update the Homebrew cask
