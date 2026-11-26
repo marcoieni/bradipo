@@ -6,12 +6,14 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
+    private var isOpeningOrTrackingMenu = false
     private let pauseStatus = NSMenuItem()
     private let takeBreak = NSMenuItem()
     private let pause = NSMenuItem()
     private let meetingItem = NSMenuItem()
     private let login = LoginItem()
     private let updater = Updater()
+    private lazy var aboutPanel = AboutPanel()
     private lazy var glowEditor = BorderGlowEditor(overlay: overlay)
     private lazy var overlay = BreakOverlay { [weak self] in self?.restartTimer() }
     private let activity = ActivityMonitor()
@@ -73,7 +75,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        statusItem.button?.performClick(nil)
+        if flag, sender.windows.contains(where: { $0.isVisible && $0.canBecomeKey }) { return true }
+        if let button = statusItem.button { openMenu(button) }
         return false
     }
 
@@ -120,7 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openMenu(_ button: NSStatusBarButton) {
         if startupPeek != nil { startCountdown() }
-        guard let window = button.window else { return }
+        guard !isOpeningOrTrackingMenu, let window = button.window else { return }
         let frame = button.convert(button.bounds, to: nil)
         let leadingX = NSApp.userInterfaceLayoutDirection == .rightToLeft ? frame.maxX : frame.minX
         var anchor = window.convertPoint(toScreen: NSPoint(x: leadingX, y: 0))
@@ -137,9 +140,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         // popUp positions the menu content. Leave room for its rounded border.
         anchor.y -= 6
+        // Return the click or reopen event to macOS before entering menu tracking.
+        isOpeningOrTrackingMenu = true
+        perform(#selector(trackMenu(at:)), with: NSValue(point: anchor), afterDelay: 0, inModes: [.default])
+    }
+
+    @objc private func trackMenu(at position: NSValue) {
+        defer { isOpeningOrTrackingMenu = false }
+        guard let button = statusItem.button else { return }
         button.highlight(true)
         defer { button.highlight(false) }
-        menu.popUp(positioning: nil, at: anchor, in: nil)
+        menu.popUp(positioning: nil, at: position.pointValue, in: nil)
     }
 
     private func addDurations(title: String, seconds: [Int], current: TimeInterval, action: Selector) {
@@ -272,25 +283,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func showAbout() {
         // The status menu restores focus to the previous app as it closes.
+        menu.cancelTrackingWithoutAnimation()
         perform(#selector(presentAboutPanel), with: nil, afterDelay: 0, inModes: [.default])
     }
 
     @objc private func presentAboutPanel() {
-        let repository = URL(string: "https://github.com/marcoieni/bradipo")!
-        let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
-        let credits = NSMutableAttributedString(string: "github.com/marcoieni/bradipo", attributes: [
-            .link: repository, .font: font,
-        ])
-        if let commit = Bundle.main.object(forInfoDictionaryKey: "BradipoGitCommit") as? String {
-            credits.append(NSAttributedString(string: "\nCommit ", attributes: [
-                .font: font, .foregroundColor: NSColor.labelColor,
-            ]))
-            credits.append(NSAttributedString(string: String(commit.prefix(12)), attributes: [
-                .link: repository.appending(path: "commit/\(commit)"), .font: font,
-            ]))
-        }
-        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
+        aboutPanel.makeKeyAndOrderFront(nil)
         NSApp.activate()
+        aboutPanel.orderFrontRegardless()
     }
 
     @objc private func togglePause() {
