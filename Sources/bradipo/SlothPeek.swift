@@ -13,6 +13,7 @@ struct SlothPeek {
         self.button = button
         self.sloth = sloth
         title = button.attributedTitle
+        setTitleOpacity(0)
     }
 
     func stop() {
@@ -29,7 +30,16 @@ struct SlothPeek {
             let t = min(1, max(0, (progress - start) / (end - start)))
             return t * t * (3 - 2 * t)
         }
-        let lift = ease(from: 0, to: 0.28) * (1 - ease(from: 0.61, to: 0.86))
+        let slothExit = 0.78
+        if progress >= slothExit {
+            // AppKit shifts the title while an image is attached. Use the final
+            // countdown layout for every visible frame of the digits.
+            button.image = nil
+            button.imagePosition = .noImage
+            setTitleOpacity(ease(from: slothExit, to: 0.96))
+            return true
+        }
+        let lift = ease(from: 0, to: 0.28) * (1 - ease(from: 0.56, to: slothExit))
         let size = NSSize(width: ceil(title.size().width), height: 22)
         button.image = NSImage(size: size, flipped: false) { [sloth] bounds in
             let width = bounds.height
@@ -44,13 +54,15 @@ struct SlothPeek {
             NSGraphicsContext.restoreGraphicsState()
             return true
         }
-        // The title keeps its natural width while the sloth occupies the same space.
+        // The hidden title reserves the countdown's width during the peek.
         button.imagePosition = .imageOverlaps
+        return true
+    }
+
+    private func setTitleOpacity(_ opacity: CGFloat) {
         let text = NSMutableAttributedString(attributedString: title)
-        let opacity = ease(from: 0.69, to: 0.96)
         text.addAttribute(.foregroundColor, value: NSColor.labelColor.withAlphaComponent(opacity),
                           range: NSRange(location: 0, length: text.length))
         button.attributedTitle = text
-        return true
     }
 }
