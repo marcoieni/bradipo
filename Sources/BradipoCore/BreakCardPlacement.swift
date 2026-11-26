@@ -39,9 +39,32 @@ public struct BreakCardPlacement {
         }
     }
 
+    public static func canReset(in defaults: UserDefaults = .standard, visibleFrames: [String: CGRect],
+                                cardSize: () -> CGSize) -> Bool {
+        lazy var size = cardSize()
+        for (key, value) in defaults.dictionaryRepresentation() where key.hasPrefix(keyPrefix) {
+            guard let values = value as? [Double], hasStoredFrame(values) else { continue }
+            let displayID = String(key.dropFirst(keyPrefix.count))
+            // Reset also clears placements for disconnected displays.
+            guard let visibleFrame = visibleFrames[displayID] else { return true }
+            let card = Self(displayID: displayID, visibleFrame: visibleFrame, cardSize: size, defaults: defaults)
+            if !card.isDefault(card.frame(from: values)) { return true }
+        }
+        return false
+    }
+
     public var savedFrame: CGRect {
-        let values = defaults.array(forKey: key) as? [Double] ?? []
-        let hasSavedFrame = values.count == 4 && values[2...].allSatisfy { $0.isFinite && $0 > 0 }
+        frame(from: defaults.array(forKey: key) as? [Double] ?? [])
+    }
+
+    private static func hasStoredFrame(_ values: [Double]) -> Bool {
+        values.count == 4 && values[2...].allSatisfy { $0.isFinite && $0 > 0 }
+    }
+
+    private var defaultFrame: CGRect { frame(from: []) }
+
+    private func frame(from values: [Double]) -> CGRect {
+        let hasSavedFrame = Self.hasStoredFrame(values)
         let requested = hasSavedFrame ? CGSize(width: values[2], height: values[3]) : defaultSize
         let size = constrainedSize(requested, maximum: visibleFrame.size)
         let travel = originRange(for: size)
@@ -51,6 +74,13 @@ public struct BreakCardPlacement {
         }
         return CGRect(x: travel.midX.rounded(), y: min(travel.minY + 22, travel.maxY),
                       width: size.width, height: size.height)
+    }
+
+    private func isDefault(_ frame: CGRect) -> Bool {
+        let original = defaultFrame
+        // Restoring a normalized origin can introduce a small rounding error.
+        return frame.size == original.size && abs(frame.minX - original.minX) < 0.000001
+            && abs(frame.minY - original.minY) < 0.000001
     }
 
     public func move(to origin: CGPoint) -> CGPoint {
@@ -89,6 +119,10 @@ public struct BreakCardPlacement {
     }
 
     private func save(_ frame: CGRect) -> CGRect {
+        if isDefault(frame) {
+            defaults.removeObject(forKey: key)
+            return defaultFrame
+        }
         let travel = originRange(for: frame.size)
         let x = travel.width > 0 ? (frame.minX - travel.minX) / travel.width : 0.5
         let y = travel.height > 0 ? (frame.minY - travel.minY) / travel.height : 0

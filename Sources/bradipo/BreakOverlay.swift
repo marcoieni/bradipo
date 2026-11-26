@@ -58,6 +58,15 @@ final class BreakOverlay: NSObject {
         CATransaction.flush()
     }
 
+    func canResetBanners(breakDuration: TimeInterval) -> Bool {
+        let frames = NSScreen.screens.reduce(into: [String: CGRect]()) { $0[$1.bannerDisplayID] = $1.visibleFrame }
+        return BreakCardPlacement.canReset(visibleFrames: frames) {
+            // Between breaks, measure the banner with the upcoming break's timer width.
+            let timer = BreakTimer(workDuration: breakDuration, breakDuration: breakDuration, now: 0)
+            return makeCard(countdown: countdown ?? BreakCountdown(timer: timer)).fittingSize
+        }
+    }
+
     @objc func resetBanners() {
         BreakCardPlacement.resetAll()
         for panel in banners {
@@ -116,12 +125,14 @@ final class BreakOverlay: NSObject {
         }
     }
 
+    private func makeCard(countdown: BreakCountdown) -> CardHostingView {
+        CardHostingView(rootView: BreakCard(countdown: countdown, onEndBreak: onEndBreak))
+    }
+
     private func makeBanner(on screen: NSScreen, countdown: BreakCountdown) -> ReminderPanel {
-        let card = CardHostingView(rootView: BreakCard(countdown: countdown, onEndBreak: onEndBreak))
+        let card = makeCard(countdown: countdown)
         let size = card.fittingSize
-        let displayID = screen.cgDirectDisplayID.flatMap { CGDisplayCreateUUIDFromDisplayID($0) }
-            .map { CFUUIDCreateString(nil, $0.takeRetainedValue()) as String } ?? screen.localizedName
-        let placement = BreakCardPlacement(displayID: displayID, visibleFrame: screen.visibleFrame, cardSize: size)
+        let placement = BreakCardPlacement(displayID: screen.bannerDisplayID, visibleFrame: screen.visibleFrame, cardSize: size)
         card.placement = placement
         card.sizingOptions = []
         card.rootView.naturalSize = size
@@ -130,6 +141,13 @@ final class BreakOverlay: NSObject {
 
     private func refreshBannerCursor() {
         for panel in banners { (panel.contentView as? CardHostingView)?.scheduleCursorUpdate() }
+    }
+}
+
+private extension NSScreen {
+    var bannerDisplayID: String {
+        cgDirectDisplayID.flatMap { CGDisplayCreateUUIDFromDisplayID($0) }
+            .map { CFUUIDCreateString(nil, $0.takeRetainedValue()) as String } ?? localizedName
     }
 }
 
