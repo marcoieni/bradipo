@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let pause = NSMenuItem()
     private let meetingItem = NSMenuItem()
     private let login = LoginItem()
+    private let updater = Updater()
     private lazy var overlay = BreakOverlay { [weak self] in self?.restartTimer() }
     private let activity = ActivityMonitor()
     private var timer: Timer?
@@ -72,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(login.menuItem)
         menu.addItem(.separator())
         menu.addItem(withTitle: "About bradipo", action: #selector(showAbout), keyEquivalent: "").target = self
+        menu.addItem(updater.menuItem)
         let quit = menu.addItem(withTitle: "Quit bradipo", action: #selector(NSApplication.terminate(_:)),
                                 keyEquivalent: "")
         quit.target = NSApp
