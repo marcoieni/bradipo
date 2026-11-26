@@ -39,18 +39,47 @@ final class BreakCardPlacementTests {
     @Test func resetRestoresCurrentAndDisconnectedDisplays() {
         let screen = CGRect(x: 0, y: 0, width: 1000, height: 600)
         let card = placement("built-in", on: screen)
-        _ = card.move(to: CGPoint(x: 10, y: 100))
-        _ = card.resize(card.savedFrame, from: .topRight, by: CGVector(dx: 200, dy: 90))
         // A disconnected display has a saved position but no live card to reset.
         defaults.set([1.0, 1.0, 400.0, 150.0], forKey: "breakCardPosition.external")
         defaults.set(900, forKey: "workSeconds")
+        #expect(BreakCardPlacement.canReset(in: defaults, visibleFrames: ["built-in": screen]) { size })
+        _ = card.move(to: CGPoint(x: 10, y: 100))
+        _ = card.resize(card.savedFrame, from: .topRight, by: CGVector(dx: 200, dy: 90))
 
         BreakCardPlacement.resetAll(in: defaults)
         let reconnected = placement("external", on: screen)
         let original = CGRect(x: 400, y: 22, width: 200, height: 60)
         #expect(card.savedFrame == original)
         #expect(reconnected.savedFrame == original)
+        #expect(!BreakCardPlacement.canReset(in: defaults, visibleFrames: ["built-in": screen]) { size })
         #expect(defaults.integer(forKey: "workSeconds") == 900)
+    }
+
+    @Test func resetIsAvailableOnlyWhilePositionOrSizeDiffers() {
+        let screen = CGRect(x: -815, y: 13, width: 815, height: 641)
+        let card = placement("external", on: screen)
+        let original = card.savedFrame
+        func canReset() -> Bool {
+            BreakCardPlacement.canReset(in: defaults, visibleFrames: ["external": screen]) { size }
+        }
+        #expect(!canReset())
+
+        // Older builds could persist the default frame as normalized coordinates.
+        defaults.set([(original.minX - screen.minX) / (screen.width - size.width),
+                      (original.minY - screen.minY) / (screen.height - size.height),
+                      size.width, size.height], forKey: "breakCardPosition.external")
+        #expect(!canReset())
+        _ = card.move(to: original.offsetBy(dx: 0.5, dy: 0).origin)
+        #expect(canReset())
+        _ = card.move(to: original.origin)
+        #expect(!canReset())
+
+        _ = card.resize(original, from: .top, by: CGVector(dx: 0, dy: 10))
+        #expect(canReset())
+        _ = card.resize(card.savedFrame, from: .top, by: CGVector(dx: 0, dy: -10))
+        #expect(!canReset())
+        // Returning to the default by hand should also clear it for a later disconnect.
+        #expect(!BreakCardPlacement.canReset(in: defaults, visibleFrames: [:]) { size })
     }
 
     @Test(arguments: [
