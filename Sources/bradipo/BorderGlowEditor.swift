@@ -30,9 +30,7 @@ final class BorderGlowEditor: NSPanel, NSWindowDelegate {
 
     @objc private func presentEditor() {
         overlay.setGlowPreview(true)
-        makeKeyAndOrderFront(nil)
-        NSApp.activate()
-        orderFrontRegardless()
+        presentFromMenuBar()
     }
 
     func windowWillClose(_ notification: Notification) {
