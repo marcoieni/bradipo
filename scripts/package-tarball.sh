@@ -1,7 +1,7 @@
 #!/bin/sh
 # Packs .build/bradipo.app from scripts/build-app.sh into .build/bradipo.tar.gz
-# for the Terminal command in README.md. The name has no version, so the
-# command's URL always points to the latest release.
+# for the Terminal command in README.md and Check for Updates. The name has no
+# version, so the command's URL always points to the latest release.
 set -eu
 cd "$(dirname "$0")/.."
 
