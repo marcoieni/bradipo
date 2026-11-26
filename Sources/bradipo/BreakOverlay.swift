@@ -6,7 +6,10 @@ import SwiftUI
 
 @MainActor
 final class BreakOverlay: NSObject {
-    private var panels: [ReminderPanel] = []
+    private var glows: [ReminderPanel] = []
+    private var banners: [ReminderPanel] = []
+    private var isPreviewingGlow = false
+    let intensity = BorderGlowIntensity()
     private var countdown: BreakCountdown?
     private let onEndBreak: () -> Void
 
@@ -29,18 +32,35 @@ final class BreakOverlay: NSObject {
             return
         }
         countdown = BreakCountdown(timer: timer)
-        showOnAllDisplays(animated: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        updatePanels(animated: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
 
     func hide() {
+        guard countdown != nil else { return }
         countdown = nil
-        panels.forEach { $0.orderOut(nil) }
-        panels.removeAll()
+        updatePanels()
+    }
+
+    func setGlowPreview(_ visible: Bool) {
+        isPreviewingGlow = visible
+        updatePanels()
+    }
+
+    func setGlowIntensity(_ value: Double) {
+        guard value != intensity.value else { return }
+        intensity.value = value
+        // The slider tracks the mouse in a nested run loop. Flush the other
+        // windows' SwiftUI layout and layer updates before the next drag event.
+        for panel in glows {
+            panel.contentView?.layoutSubtreeIfNeeded()
+            panel.displayIfNeeded()
+        }
+        CATransaction.flush()
     }
 
     @objc func resetBanners() {
         BreakCardPlacement.resetAll()
-        for panel in panels {
+        for panel in banners {
             if let card = panel.contentView as? CardHostingView, let placement = card.placement {
                 panel.setFrame(placement.savedFrame, display: true)
                 card.scheduleCursorUpdate()
@@ -49,36 +69,45 @@ final class BreakOverlay: NSObject {
     }
 
     @objc private func displaysChanged() {
-        showOnAllDisplays(animated: false)
+        dismiss(&glows)
+        dismiss(&banners)
+        updatePanels()
     }
 
-    private func showOnAllDisplays(animated: Bool) {
-        guard let countdown else { return }
+    private func dismiss(_ panels: inout [ReminderPanel]) {
         panels.forEach { $0.orderOut(nil) }
-        panels = NSScreen.screens.flatMap { screen in
-            // Only the small card receives clicks. The window server delivers input
-            // through the full-screen glow directly to the application underneath.
-            let glow = ReminderPanel(content: NSHostingView(rootView: ScreenGlow()),
-                                     frame: screen.frame, receivesClicks: false)
-            let card = CardHostingView(rootView: BreakCard(countdown: countdown, onEndBreak: onEndBreak))
-            let size = card.fittingSize
-            let displayID = screen.cgDirectDisplayID.flatMap { CGDisplayCreateUUIDFromDisplayID($0) }
-                .map { CFUUIDCreateString(nil, $0.takeRetainedValue()) as String } ?? screen.localizedName
-            let placement = BreakCardPlacement(displayID: displayID, visibleFrame: screen.visibleFrame, cardSize: size)
-            card.placement = placement
-            card.sizingOptions = []
-            card.rootView.naturalSize = size
-            return [glow, ReminderPanel(content: card, frame: placement.savedFrame, receivesClicks: true)]
+        panels.removeAll()
+    }
+
+    private func updatePanels(animated: Bool = false) {
+        var added: [ReminderPanel] = []
+        if countdown == nil && !isPreviewingGlow {
+            dismiss(&glows)
+        } else if glows.isEmpty {
+            glows = NSScreen.screens.map { screen in
+                ReminderPanel(content: NSHostingView(rootView: ScreenGlow(intensity: intensity)),
+                              frame: screen.frame, receivesClicks: false)
+            }
+            added += glows
         }
 
-        for panel in panels {
+        if let countdown {
+            if banners.isEmpty {
+                banners = NSScreen.screens.map { makeBanner(on: $0, countdown: countdown) }
+                added += banners
+            }
+        } else {
+            dismiss(&banners)
+        }
+        guard !added.isEmpty else { return }
+        for panel in added {
             panel.alphaValue = animated ? 0 : 1
             panel.orderFrontRegardless()
         }
         if animated {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.55
-                panels.forEach { $0.animator().alphaValue = 1 }
+                added.forEach { $0.animator().alphaValue = 1 }
             } completionHandler: { [weak self] in
                 Task { @MainActor in self?.refreshBannerCursor() }
             }
@@ -87,8 +116,20 @@ final class BreakOverlay: NSObject {
         }
     }
 
+    private func makeBanner(on screen: NSScreen, countdown: BreakCountdown) -> ReminderPanel {
+        let card = CardHostingView(rootView: BreakCard(countdown: countdown, onEndBreak: onEndBreak))
+        let size = card.fittingSize
+        let displayID = screen.cgDirectDisplayID.flatMap { CGDisplayCreateUUIDFromDisplayID($0) }
+            .map { CFUUIDCreateString(nil, $0.takeRetainedValue()) as String } ?? screen.localizedName
+        let placement = BreakCardPlacement(displayID: displayID, visibleFrame: screen.visibleFrame, cardSize: size)
+        card.placement = placement
+        card.sizingOptions = []
+        card.rootView.naturalSize = size
+        return ReminderPanel(content: card, frame: placement.savedFrame, receivesClicks: true)
+    }
+
     private func refreshBannerCursor() {
-        for panel in panels { (panel.contentView as? CardHostingView)?.scheduleCursorUpdate() }
+        for panel in banners { (panel.contentView as? CardHostingView)?.scheduleCursorUpdate() }
     }
 }
 
@@ -313,11 +354,12 @@ private final class BreakCountdown {
 
 private struct ScreenGlow: View {
     @AppStorage(BreakAccent.defaultsKey) private var accent = BreakAccent.green
+    let intensity: BorderGlowIntensity
 
     var body: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .stroke(accent.glow.opacity(0.52), lineWidth: 22)
-            .blur(radius: 12)
+            .stroke(accent.glow.opacity(intensity.opacity), lineWidth: intensity.lineWidth)
+            .blur(radius: intensity.blurRadius)
             .ignoresSafeArea()
             .allowsHitTesting(false)
             .accessibilityHidden(true)
