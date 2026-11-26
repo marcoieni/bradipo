@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private lazy var overlay = BreakOverlay { [weak self] in self?.restartTimer() }
     private let activity = ActivityMonitor()
     private var timer: Timer?
+    private var startupPeek: SlothPeek?
 
     private let defaults = UserDefaults.standard
     @AppStorage(BreakAccent.defaultsKey) private var accent = BreakAccent.green
@@ -39,9 +40,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.target = self
             button.action = #selector(openMenu(_:))
             button.sendAction(on: [.leftMouseDown, .rightMouseDown])
+            button.title = clock.formattedRemainingTime
+            if let peek = SlothPeek(button: button) {
+                startupPeek = peek
+                button.toolTip = "bradipo · Starting work interval"
+                button.setAccessibilityLabel("bradipo, starting work interval, \(button.title)")
+                let frames = Timer(timeInterval: 1.0 / 30, target: self, selector: #selector(animateStartup),
+                                   userInfo: nil, repeats: true)
+                timer = frames
+                RunLoop.main.add(frames, forMode: .common)
+                animateStartup()
+                return
+            }
         }
+        startCountdown()
+    }
+
+    @objc private func animateStartup() {
+        if startupPeek?.drawFrame(at: now) == false { startCountdown() }
+    }
+
+    private func startCountdown() {
+        timer?.invalidate()
+        startupPeek?.stop()
+        startupPeek = nil
+        let state = activity.sample(detectMeetings: deferBreaksDuringMeetings)
+        let start = now
+        clock.restart(at: start)
+        clock.tick(at: start, activity: state)
         activity.onChange = { [weak self] in self?.tick() }
-        tick()
+        render()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -91,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func openMenu(_ button: NSStatusBarButton) {
+        if startupPeek != nil { startCountdown() }
         guard let window = button.window else { return }
         let frame = button.convert(button.bounds, to: nil)
         let leadingX = NSApp.userInterfaceLayoutDirection == .rightToLeft ? frame.maxX : frame.minX
