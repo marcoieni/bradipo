@@ -30,7 +30,11 @@ private struct AboutContent: View {
                 .accessibilityHidden(true)
             Text("bradipo").font(.headline)
             if let version {
-                Text("Version \(version)\(build.map { " (\($0))" } ?? "")")
+                if let build, build != version {
+                    Text("Version \(version) (\(build))")
+                } else {
+                    Text("Version \(version)")
+                }
             }
             VStack(spacing: 2) {
                 Link("github.com/marcoieni/bradipo", destination: repository)
