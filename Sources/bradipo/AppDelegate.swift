@@ -277,7 +277,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .link: repository, .font: font,
         ])
         if let commit = Bundle.main.object(forInfoDictionaryKey: "BradipoGitCommit") as? String {
-            credits.append(NSAttributedString(string: "\nCommit \(commit.prefix(12))", attributes: [
+            credits.append(NSAttributedString(string: "\nCommit ", attributes: [
+                .font: font, .foregroundColor: NSColor.labelColor,
+            ]))
+            credits.append(NSAttributedString(string: String(commit.prefix(12)), attributes: [
                 .link: repository.appending(path: "commit/\(commit)"), .font: font,
             ]))
         }
