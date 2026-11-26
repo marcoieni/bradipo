@@ -102,8 +102,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addDurations(breakMenu, seconds: [20, 30, 60, 120, 300],
                      action: #selector(changeBreak), customAction: #selector(editBreakDuration))
         menu.addItem(withTitle: "Accent Color…", action: #selector(chooseAccentColor), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Border Glow Intensity…", action: #selector(BorderGlowEditor.openEditor),
-                     keyEquivalent: "").target = glowEditor
+        menu.addItem(withTitle: "Border Glow Intensity…", action: #selector(editGlowIntensity),
+                     keyEquivalent: "").target = self
         resetBanners.target = overlay
         menu.addItem(resetBanners)
         menu.addItem(.separator())
@@ -283,6 +283,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func resetAccentColor() {
         accent = .green
         NSColorPanel.shared.color = accent.color
+    }
+
+    @objc private func editGlowIntensity() {
+        afterMenuCloses(#selector(presentGlowEditor))
+    }
+
+    @objc private func presentGlowEditor() {
+        glowEditor.presentPreview()
     }
 
     @objc private func showAbout() {

@@ -23,12 +23,7 @@ final class BorderGlowEditor: NSPanel, NSWindowDelegate {
         center()
     }
 
-    @objc func openEditor() {
-        // Present after the status menu has returned focus.
-        perform(#selector(presentEditor), with: nil, afterDelay: 0, inModes: [.default])
-    }
-
-    @objc private func presentEditor() {
+    func presentPreview() {
         overlay.setGlowPreview(true)
         presentFromMenuBar()
     }
