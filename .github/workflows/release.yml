@@ -58,7 +58,7 @@ jobs:
           cask=Casks/bradipo.rb
           version=${GITHUB_REF_NAME#v}
           current=$(grep -Po '^  version "\K[^"]+' "$cask")
-          if [ "$(printf '%s\n' "$current" "$version" | sort -V | tail -n 1)" != "$version" ]; then
+          if ! printf '%s\n' "$current" "$version" | sort -V --check=quiet; then
             echo "Not downgrading the cask from $current to $version"
             exit 0
           fi
