@@ -48,7 +48,9 @@ final class BreakOverlay: NSObject {
 
     func setGlowIntensity(_ value: Double) {
         guard value != intensity.value else { return }
+        let wasOff = intensity.value == 0
         intensity.value = value
+        if wasOff || value == 0 { updatePanels() }
         // The slider tracks the mouse in a nested run loop. Flush the other
         // windows' SwiftUI layout and layer updates before the next drag event.
         for panel in glows {
@@ -90,7 +92,7 @@ final class BreakOverlay: NSObject {
 
     private func updatePanels(animated: Bool = false) {
         var added: [ReminderPanel] = []
-        if countdown == nil && !isPreviewingGlow {
+        if intensity.value == 0 || (countdown == nil && !isPreviewingGlow) {
             dismiss(&glows)
         } else if glows.isEmpty {
             glows = NSScreen.screens.map { screen in
@@ -111,7 +113,12 @@ final class BreakOverlay: NSObject {
         guard !added.isEmpty else { return }
         for panel in added {
             panel.alphaValue = animated ? 0 : 1
-            panel.orderFrontRegardless()
+            // Keep a glow restored by the slider behind the editor and any visible break cards.
+            if panel.ignoresMouseEvents && isPreviewingGlow {
+                panel.orderBack(nil)
+            } else {
+                panel.orderFrontRegardless()
+            }
         }
         if animated {
             NSAnimationContext.runAnimationGroup { context in
