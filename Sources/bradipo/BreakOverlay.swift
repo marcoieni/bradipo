@@ -312,9 +312,11 @@ private final class BreakCountdown {
 }
 
 private struct ScreenGlow: View {
+    @AppStorage(BreakAccent.defaultsKey) private var accent = BreakAccent.green
+
     var body: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .stroke(Color(red: 0.52, green: 0.78, blue: 0.68).opacity(0.52), lineWidth: 22)
+            .stroke(accent.glow.opacity(0.52), lineWidth: 22)
             .blur(radius: 12)
             .ignoresSafeArea()
             .allowsHitTesting(false)
@@ -328,9 +330,8 @@ private struct BreakCard: View {
     var naturalSize: CGSize?
 
     private static let sloth = NSImage(named: "Sloth.png")
-    private let ink = Color(red: 0.12, green: 0.19, blue: 0.16)
+    @AppStorage(BreakAccent.defaultsKey) private var accent = BreakAccent.green
     private let cream = Color(red: 0.97, green: 0.96, blue: 0.89)
-    private let sage = Color(red: 0.63, green: 0.78, blue: 0.61)
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 29)
@@ -344,7 +345,7 @@ private struct BreakCard: View {
                 label
             }
         }
-        .background(ink, in: shape)
+        .background(accent.background, in: shape)
         .overlay { shape.strokeBorder(cream.opacity(0.24), lineWidth: 1) }
         // Give the window server a hit target even at the transparent-looking corners.
         .background(Color.black.opacity(0.01))
@@ -371,11 +372,11 @@ private struct BreakCard: View {
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
                 .foregroundStyle(cream)
             Rectangle()
-                .fill(sage.opacity(0.40))
+                .fill(accent.divider.opacity(0.40))
                 .frame(width: 1, height: 18)
             Text(verbatim: countdown.timer.formattedRemainingTime)
                 .font(.system(size: 14, weight: .medium, design: .monospaced))
-                .foregroundStyle(Color(red: 0.80, green: 0.87, blue: 0.71))
+                .foregroundStyle(accent.countdown)
         }
         .padding(.leading, Self.sloth == nil ? 20 : 8)
         .padding(.trailing, 20)

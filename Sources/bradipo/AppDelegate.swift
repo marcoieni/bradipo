@@ -1,5 +1,6 @@
 import AppKit
 import BradipoCore
+import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -16,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var timer: Timer?
 
     private let defaults = UserDefaults.standard
+    @AppStorage(BreakAccent.defaultsKey) private var accent = BreakAccent.green
     private var deferBreaksDuringMeetings: Bool { defaults.bool(forKey: "pauseDuringMeetings") }
     private var clock: BreakTimer
     private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
@@ -63,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                      current: clock.workDuration, action: #selector(changeWork))
         addDurations(title: "Break length", seconds: [20, 30, 60, 120, 300],
                      current: clock.breakDuration, action: #selector(changeBreak))
+        menu.addItem(withTitle: "Accent Color…", action: #selector(chooseAccentColor), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Reset Banner Size and Position", action: #selector(BreakOverlay.resetBanners),
                      keyEquivalent: "").target = overlay
         menu.addItem(.separator())
@@ -203,6 +206,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleMeetingDeferral() {
         defaults.set(!deferBreaksDuringMeetings, forKey: "pauseDuringMeetings")
         tick()
+    }
+
+    @objc private func chooseAccentColor() {
+        let panel = NSColorPanel.shared
+        panel.title = "Accent Color"
+        panel.showsAlpha = false
+        panel.isContinuous = true
+        panel.color = accent.color
+        panel.setTarget(self)
+        panel.setAction(#selector(changeAccentColor(_:)))
+        panel.accessoryView = NSButton(title: "Restore Default Green", target: self, action: #selector(resetAccentColor))
+        NSApp.activate()
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func changeAccentColor(_ panel: NSColorPanel) {
+        if let color = BreakAccent(color: panel.color) { accent = color }
+    }
+
+    @objc private func resetAccentColor() {
+        accent = .green
+        NSColorPanel.shared.color = accent.color
     }
 
     @objc private func showAbout() {
