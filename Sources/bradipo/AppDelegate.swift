@@ -273,9 +273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.setTarget(self)
         panel.setAction(#selector(changeAccentColor(_:)))
         panel.accessoryView = NSButton(title: "Restore Default Green", target: self, action: #selector(resetAccentColor))
-        panel.makeKeyAndOrderFront(nil)
-        NSApp.activate()
-        panel.orderFrontRegardless()
+        panel.presentFromMenuBar()
     }
 
     @objc private func changeAccentColor(_ panel: NSColorPanel) {
@@ -298,9 +296,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func presentAboutPanel() {
-        aboutPanel.makeKeyAndOrderFront(nil)
-        NSApp.activate()
-        aboutPanel.orderFrontRegardless()
+        aboutPanel.presentFromMenuBar()
     }
 
     @objc private func togglePause() {
@@ -328,5 +324,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         defaults.set(seconds, forKey: "breakSeconds")
         clock.configure(workDuration: clock.workDuration, breakDuration: Double(seconds), at: now)
         tick()
+    }
+}
+
+extension NSWindow {
+    /// Call after the status menu returns focus, on a window that doesn't hide on
+    /// deactivation: the menu-bar app can still be inactive after it requests
+    /// activation, so the window is ordered front anyway.
+    @MainActor func presentFromMenuBar() {
+        makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        orderFrontRegardless()
     }
 }
