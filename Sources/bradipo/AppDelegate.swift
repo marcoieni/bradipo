@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let pauseStatus = NSMenuItem()
     private let takeBreak = NSMenuItem()
     private let pause = NSMenuItem()
+    private let workMenu = NSMenu(title: "Work interval")
+    private let breakMenu = NSMenu(title: "Break length")
     private let resetBanners = NSMenuItem(title: "Reset Banner Size and Position", action: #selector(BreakOverlay.resetBanners),
                                           keyEquivalent: "")
     private let meetingItem = NSMenuItem()
@@ -95,12 +97,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(pause)
         menu.addItem(withTitle: "Restart Timer", action: #selector(restartTimer), keyEquivalent: "").target = self
         menu.addItem(.separator())
-        addDurations(title: "Work interval", seconds: [5, 10, 20, 30, 45, 60].map { $0 * 60 },
-                     current: clock.workDuration, action: #selector(changeWork),
-                     customAction: #selector(editWorkDuration))
-        addDurations(title: "Break length", seconds: [20, 30, 60, 120, 300],
-                     current: clock.breakDuration, action: #selector(changeBreak),
-                     customAction: #selector(editBreakDuration))
+        addDurations(workMenu, seconds: [5, 10, 20, 30, 45, 60].map { $0 * 60 },
+                     action: #selector(changeWork), customAction: #selector(editWorkDuration))
+        addDurations(breakMenu, seconds: [20, 30, 60, 120, 300],
+                     action: #selector(changeBreak), customAction: #selector(editBreakDuration))
         menu.addItem(withTitle: "Accent Color…", action: #selector(chooseAccentColor), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Border Glow Intensity…", action: #selector(BorderGlowEditor.openEditor),
                      keyEquivalent: "").target = glowEditor
@@ -124,6 +124,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         resetBanners.isEnabled = overlay.canResetBanners(breakDuration: clock.breakDuration)
         meetingItem.state = deferBreaksDuringMeetings ? .on : .off
         login.refresh()
+        updateDurationMenu(workMenu, seconds: Int(clock.workDuration))
+        updateDurationMenu(breakMenu, seconds: Int(clock.breakDuration))
     }
 
     @objc private func openMenu(_ button: NSStatusBarButton) {
@@ -158,9 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.popUp(positioning: nil, at: position.pointValue, in: nil)
     }
 
-    private func addDurations(title: String, seconds: [Int], current: TimeInterval,
-                              action: Selector, customAction: Selector) {
-        let submenu = NSMenu(title: title)
+    private func addDurations(_ submenu: NSMenu, seconds: [Int], action: Selector, customAction: Selector) {
         for value in seconds {
             let label = value.isMultiple(of: 60) ? "\(value / 60) min" : "\(value) sec"
             let item = submenu.addItem(withTitle: label, action: action, keyEquivalent: "")
@@ -169,10 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         submenu.addItem(.separator())
         submenu.addItem(withTitle: "Custom…", action: customAction, keyEquivalent: "").target = self
-        updateDurationMenu(submenu, seconds: Int(current))
-        let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        parent.submenu = submenu
-        menu.addItem(parent)
+        menu.addItem(withTitle: submenu.title, action: nil, keyEquivalent: "").submenu = submenu
     }
 
     private func updateDurationMenu(_ submenu: NSMenu, seconds: Int) {
@@ -187,9 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func selectedDuration(_ sender: NSMenuItem, current: TimeInterval) -> Int? {
         guard let submenu = sender.menu else { return nil }
         let isCustom = sender.tag == 0
-        let seconds = isCustom ? DurationEditor(title: submenu.title, duration: Int(current)).run() : sender.tag
-        if let seconds { updateDurationMenu(submenu, seconds: seconds) }
-        return seconds
+        return isCustom ? DurationEditor(title: submenu.title, duration: Int(current)).run() : sender.tag
     }
 
     @objc private func tick() {
