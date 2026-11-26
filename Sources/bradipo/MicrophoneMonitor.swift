@@ -11,15 +11,28 @@ final class MicrophoneMonitor {
     }
 
     private let listener: Listener
+    // Keep this monitor's delegates off the shared AudioHardwareSystem instance.
+    private let system = AudioHardwareObject(id: AudioObjectID(kAudioObjectSystemObject))
+    private let deviceList = [PropertyAddress(kAudioHardwarePropertyDevices)]
     private let running = [PropertyAddress(kAudioDevicePropertyDeviceIsRunningSomewhere)]
     private let inputDevices = PropertyAddress(kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeInput)
     private var observed: [AudioObjectID: AudioHardwareDevice] = [:]
+    private var observesDeviceList = false
+    private var needsDeviceRefresh = true
 
     init(onChange: @escaping @MainActor @Sendable () -> Void) {
         listener = Listener(onChange: onChange)
+        system.delegates = [Listener { [weak self] in
+            guard let self else { return }
+            needsDeviceRefresh = true
+            onChange()
+        }]
+        observesDeviceList = (try? system.addListener(forProperties: deviceList, dispatchQueue: .main)) != nil
     }
 
     isolated deinit {
+        system.delegates = []
+        if observesDeviceList { try? system.removeListener(forProperties: deviceList, dispatchQueue: .main) }
         for device in observed.values { stopObserving(device) }
     }
 
@@ -29,7 +42,7 @@ final class MicrophoneMonitor {
     }
 
     var isInUse: Bool {
-        if let devices = try? AudioHardwareSystem.shared.devices {
+        if needsDeviceRefresh, let devices = try? AudioHardwareSystem.shared.devices {
             let ids = Set(devices.map(\.id))
             for (id, device) in observed where !ids.contains(id) {
                 stopObserving(device)
@@ -41,6 +54,8 @@ final class MicrophoneMonitor {
                     observed[device.id] = device
                 }
             }
+            // Retry on the next sample if Core Audio couldn't register a listener.
+            needsDeviceRefresh = !observesDeviceList || observed.count != ids.count
         }
         let processes = (try? AudioHardwareSystem.shared.processes) ?? []
         return processes.contains(where: usesRunningMicrophone)
