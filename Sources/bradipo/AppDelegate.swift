@@ -19,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let updater = Updater()
     private lazy var aboutPanel = AboutPanel()
     private lazy var glowEditor = BorderGlowEditor(overlay: overlay)
-    private lazy var overlay = BreakOverlay { [weak self] in self?.restartTimer() }
+    private lazy var overlay = BreakOverlay { [weak self] in self?.endBreak() }
     private let activity = ActivityMonitor()
     private var timer: Timer?
     private var startupPeek: SlothPeek?
@@ -212,7 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pauseStatus.isHidden = reason == nil || clock.pauseReason == .manual
         pauseStatus.title = reason ?? ""
         takeBreak.title = resting ? "Stop break" : "Take a Break"
-        takeBreak.action = resting ? #selector(restartTimer) : #selector(startBreak)
+        takeBreak.action = resting ? #selector(endBreak) : #selector(startBreak)
         takeBreak.isEnabled = resting || clock.canStartBreak
         pause.isEnabled = !resting
         pause.title = clock.isManuallyPaused ? "Resume Reminders" : "Pause Reminders"
@@ -244,6 +244,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func restartTimer() {
         clock.restart(at: now)
+        tick()
+    }
+
+    @objc private func endBreak() {
+        clock.endBreak(at: now)
         tick()
     }
 

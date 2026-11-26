@@ -195,10 +195,27 @@ func meetingDuringBreakPreservesItsDeadline(activityAtEnd: ActivityState) {
     #expect(timer.remainingSeconds == 5)
 }
 
-@Test func restartingDuringABreakStartsAFreshWorkInterval() {
+@Test func restartingDuringABreakRestoresItsFullDuration() {
     var timer = BreakTimer(workDuration: 120, breakDuration: 20, now: 0)
     timer.startBreak(at: 65)
+    timer.tick(at: 72, activity: .active)
+    // A length change is for the next break. This break still lasts 20 seconds.
+    timer.configure(workDuration: 120, breakDuration: 30, at: 72)
     timer.restart(at: 73)
+    #expect(timer.phase == .resting)
+    #expect(timer.remainingSeconds == 20)
+
+    timer.tick(at: 85, activity: .active)
+    #expect(timer.remainingSeconds == 8)
+    timer.tick(at: 93, activity: .active)
+    #expect(timer.phase == .working)
+    #expect(timer.remainingSeconds == 120)
+}
+
+@Test func stoppingABreakStartsAFreshWorkInterval() {
+    var timer = BreakTimer(workDuration: 120, breakDuration: 20, now: 0)
+    timer.startBreak(at: 65)
+    timer.endBreak(at: 73)
 
     // The original break deadline must not end the new work interval.
     timer.tick(at: 85, activity: .active)

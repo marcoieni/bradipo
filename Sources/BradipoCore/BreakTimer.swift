@@ -93,16 +93,21 @@ public struct BreakTimer: Sendable {
         case .resting:
             remaining -= elapsed
             if remaining <= 0 || activity == .unavailable {
-                restart(at: now)
+                endBreak(at: now)
             }
         }
     }
 
     public mutating func restart(at now: TimeInterval) {
-        activeBreakDuration = nil
-        remaining = workDuration
+        remaining = activeBreakDuration ?? workDuration
         isManuallyPaused = false
         lastTick = now
+    }
+
+    public mutating func endBreak(at now: TimeInterval) {
+        guard phase == .resting else { return }
+        activeBreakDuration = nil
+        restart(at: now)
     }
 
     public mutating func setManuallyPaused(_ paused: Bool, at now: TimeInterval) {
