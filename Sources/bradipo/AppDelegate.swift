@@ -209,16 +209,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func chooseAccentColor() {
+        // Let the status menu finish returning focus before presenting the panel.
+        perform(#selector(showAccentColorPanel), with: nil, afterDelay: 0, inModes: [.default])
+    }
+
+    @objc private func showAccentColorPanel() {
         let panel = NSColorPanel.shared
         panel.title = "Accent Color"
+        // The menu-bar app can still be inactive after it requests activation.
+        panel.hidesOnDeactivate = false
         panel.showsAlpha = false
         panel.isContinuous = true
         panel.color = accent.color
         panel.setTarget(self)
         panel.setAction(#selector(changeAccentColor(_:)))
         panel.accessoryView = NSButton(title: "Restore Default Green", target: self, action: #selector(resetAccentColor))
-        NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        panel.orderFrontRegardless()
     }
 
     @objc private func changeAccentColor(_ panel: NSColorPanel) {
