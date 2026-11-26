@@ -94,9 +94,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(withTitle: "Restart Timer", action: #selector(restartTimer), keyEquivalent: "").target = self
         menu.addItem(.separator())
         addDurations(title: "Work interval", seconds: [5, 10, 20, 30, 45, 60].map { $0 * 60 },
-                     current: clock.workDuration, action: #selector(changeWork))
+                     current: clock.workDuration, action: #selector(changeWork),
+                     customAction: #selector(editWorkDuration))
         addDurations(title: "Break length", seconds: [20, 30, 60, 120, 300],
-                     current: clock.breakDuration, action: #selector(changeBreak))
+                     current: clock.breakDuration, action: #selector(changeBreak),
+                     customAction: #selector(editBreakDuration))
         menu.addItem(withTitle: "Accent Color…", action: #selector(chooseAccentColor), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Border Glow Intensity…", action: #selector(BorderGlowEditor.openEditor),
                      keyEquivalent: "").target = glowEditor
@@ -153,7 +155,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.popUp(positioning: nil, at: position.pointValue, in: nil)
     }
 
-    private func addDurations(title: String, seconds: [Int], current: TimeInterval, action: Selector) {
+    private func addDurations(title: String, seconds: [Int], current: TimeInterval,
+                              action: Selector, customAction: Selector) {
         let submenu = NSMenu(title: title)
         for value in seconds {
             let label = value.isMultiple(of: 60) ? "\(value / 60) min" : "\(value) sec"
@@ -162,7 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.tag = value
         }
         submenu.addItem(.separator())
-        submenu.addItem(withTitle: "Custom…", action: action, keyEquivalent: "").target = self
+        submenu.addItem(withTitle: "Custom…", action: customAction, keyEquivalent: "").target = self
         updateDurationMenu(submenu, seconds: Int(current))
         let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         parent.submenu = submenu
@@ -282,9 +285,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func showAbout() {
+        afterMenuCloses(#selector(presentAboutPanel))
+    }
+
+    private func afterMenuCloses(_ action: Selector, with sender: NSMenuItem? = nil) {
         // The status menu restores focus to the previous app as it closes.
         menu.cancelTrackingWithoutAnimation()
-        perform(#selector(presentAboutPanel), with: nil, afterDelay: 0, inModes: [.default])
+        perform(action, with: sender, afterDelay: 0, inModes: [.default])
     }
 
     @objc private func presentAboutPanel() {
@@ -298,11 +305,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         tick()
     }
 
+    @objc private func editWorkDuration(_ sender: NSMenuItem) {
+        afterMenuCloses(#selector(changeWork), with: sender)
+    }
+
     @objc private func changeWork(_ sender: NSMenuItem) {
         guard let seconds = selectedDuration(sender, current: clock.workDuration) else { return }
         defaults.set(seconds, forKey: "workSeconds")
         clock.configure(workDuration: Double(seconds), breakDuration: clock.breakDuration, at: now)
         tick()
+    }
+
+    @objc private func editBreakDuration(_ sender: NSMenuItem) {
+        afterMenuCloses(#selector(changeBreak), with: sender)
     }
 
     @objc private func changeBreak(_ sender: NSMenuItem) {
