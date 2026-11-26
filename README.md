@@ -30,7 +30,7 @@ Releases aren't notarized by Apple, so macOS blocks copies downloaded with a bro
 
 #### Install with Homebrew
 
-If bradipo is already in Applications and you installed it without Homebrew, quit it and move it to the Trash first. You keep your intervals, banner size and position, and meetings setting. Then run:
+If bradipo is already in Applications and you installed it without Homebrew, quit it and move it to the Trash first. You keep your settings, though you might need to turn Launch at Login back on. Then run:
 
 ```sh
 brew install --cask marcoieni/tap/bradipo
@@ -38,7 +38,7 @@ brew install --cask marcoieni/tap/bradipo
 
 The cask removes the quarantine that Homebrew adds, so macOS skips its check, as it does with the Terminal command. Install it only if you trust this repository and [the tap](https://github.com/marcoieni/homebrew-tap).
 
-To update, run `brew upgrade --cask marcoieni/tap/bradipo`. With the short name, Homebrew can take a day to notice a new release. To uninstall, run `brew uninstall --cask bradipo`, or add `--zap` to delete your intervals, banner size and position, and meetings setting too.
+To update, run `brew upgrade --cask marcoieni/tap/bradipo`. With the short name, Homebrew can take a day to notice a new release. To uninstall, run `brew uninstall --cask bradipo`, or add `--zap` to delete your settings too.
 
 #### Install from the disk image
 
