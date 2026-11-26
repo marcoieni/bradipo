@@ -11,12 +11,19 @@ if [ -n "$version" ] && ! printf '%s\n' "$version" | grep -Eqx '[0-9]+\.[0-9]+\.
     exit 64
 fi
 
+commit=
+if [ -e .git ]; then
+    commit=$(git rev-parse --verify 'HEAD^{commit}')
+fi
 swift build -c release --product bradipo
 bin_dir=$(swift build -c release --show-bin-path)
 contents=".build/bradipo.app/Contents"
 mkdir -p "$contents/MacOS" "$contents/Resources"
 cp "$bin_dir/bradipo" "$contents/MacOS/bradipo"
 cp Resources/Info.plist "$contents/"
+if [ -n "$commit" ]; then
+    plutil -insert BradipoGitCommit -string "$commit" "$contents/Info.plist"
+fi
 if [ -n "$version" ]; then
     plutil -replace CFBundleShortVersionString -string "$version" "$contents/Info.plist"
     plutil -replace CFBundleVersion -string "$version" "$contents/Info.plist"

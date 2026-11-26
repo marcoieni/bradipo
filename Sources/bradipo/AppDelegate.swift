@@ -271,13 +271,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func showAbout() {
-        NSApp.activate()
-        NSApp.orderFrontStandardAboutPanel(options: [
-            .credits: NSAttributedString(string: "github.com/marcoieni/bradipo", attributes: [
-                .link: URL(string: "https://github.com/marcoieni/bradipo")!,
-                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
-            ]),
+        let repository = URL(string: "https://github.com/marcoieni/bradipo")!
+        let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        let credits = NSMutableAttributedString(string: "github.com/marcoieni/bradipo", attributes: [
+            .link: repository, .font: font,
         ])
+        if let commit = Bundle.main.object(forInfoDictionaryKey: "BradipoGitCommit") as? String {
+            credits.append(NSAttributedString(string: "\nCommit \(commit.prefix(12))", attributes: [
+                .link: repository.appending(path: "commit/\(commit)"), .font: font,
+            ]))
+        }
+        NSApp.activate()
+        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
     }
 
     @objc private func togglePause() {
