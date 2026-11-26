@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let meetingItem = NSMenuItem()
     private let login = LoginItem()
     private let updater = Updater()
+    private lazy var glowEditor = BorderGlowEditor(overlay: overlay)
     private lazy var overlay = BreakOverlay { [weak self] in self?.restartTimer() }
     private let activity = ActivityMonitor()
     private var timer: Timer?
@@ -66,6 +67,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addDurations(title: "Break length", seconds: [20, 30, 60, 120, 300],
                      current: clock.breakDuration, action: #selector(changeBreak))
         menu.addItem(withTitle: "Accent Color…", action: #selector(chooseAccentColor), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Border Glow Intensity…", action: #selector(BorderGlowEditor.openEditor),
+                     keyEquivalent: "").target = glowEditor
         menu.addItem(withTitle: "Reset Banner Size and Position", action: #selector(BreakOverlay.resetBanners),
                      keyEquivalent: "").target = overlay
         menu.addItem(.separator())
