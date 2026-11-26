@@ -271,6 +271,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func showAbout() {
+        // The status menu restores focus to the previous app as it closes.
+        perform(#selector(presentAboutPanel), with: nil, afterDelay: 0, inModes: [.default])
+    }
+
+    @objc private func presentAboutPanel() {
         let repository = URL(string: "https://github.com/marcoieni/bradipo")!
         let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
         let credits = NSMutableAttributedString(string: "github.com/marcoieni/bradipo", attributes: [
@@ -284,8 +289,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 .link: repository.appending(path: "commit/\(commit)"), .font: font,
             ]))
         }
-        NSApp.activate()
         NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
+        NSApp.activate()
     }
 
     @objc private func togglePause() {
