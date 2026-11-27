@@ -9,6 +9,7 @@ final class BreakOverlay: NSObject {
     private var glows: [ReminderPanel] = []
     private var banners: [ReminderPanel] = []
     private var isPreviewingGlow = false
+    @AppStorage("showBreakBanner") private(set) var showsBanner = true
     let intensity = BorderGlowIntensity()
     private var countdown: BreakCountdown?
     private let onEndBreak: () -> Void
@@ -43,6 +44,11 @@ final class BreakOverlay: NSObject {
 
     func setGlowPreview(_ visible: Bool) {
         isPreviewingGlow = visible
+        updatePanels()
+    }
+
+    @objc func toggleBanner() {
+        showsBanner.toggle()
         updatePanels()
     }
 
@@ -102,7 +108,7 @@ final class BreakOverlay: NSObject {
             added += glows
         }
 
-        if let countdown {
+        if showsBanner, let countdown {
             if banners.isEmpty {
                 banners = NSScreen.screens.map { makeBanner(on: $0, countdown: countdown) }
                 added += banners

@@ -12,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let pause = NSMenuItem()
     private let workMenu = NSMenu(title: "Work interval")
     private let breakMenu = NSMenu(title: "Break length")
+    private let showBanner = NSMenuItem(title: "Show Break Banner", action: #selector(BreakOverlay.toggleBanner),
+                                        keyEquivalent: "")
     private let resetBanners = NSMenuItem(title: "Reset Banner Size and Position", action: #selector(BreakOverlay.resetBanners),
                                           keyEquivalent: "")
     private let meetingItem = NSMenuItem()
@@ -104,6 +106,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(withTitle: "Accent Color…", action: #selector(chooseAccentColor), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Border Glow Intensity…", action: #selector(editGlowIntensity),
                      keyEquivalent: "").target = self
+        showBanner.target = overlay
+        menu.addItem(showBanner)
         resetBanners.target = overlay
         menu.addItem(resetBanners)
         menu.addItem(.separator())
@@ -121,6 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        showBanner.state = overlay.showsBanner ? .on : .off
         resetBanners.isEnabled = overlay.canResetBanners(breakDuration: clock.breakDuration)
         meetingItem.state = deferBreaksDuringMeetings ? .on : .off
         login.refresh()
