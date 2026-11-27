@@ -222,14 +222,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             overlay.hide()
         }
 
-        // A headset playing output can stay running when its input stops, so there
-        // may be no device notification. Recheck more often while a break is due.
-        let delay: TimeInterval = switch clock.pauseReason {
-        case .meeting: 0.25
-        case nil: clock.timeUntilNextDisplayedSecond
-        default: 1
-        }
         timer?.invalidate()
+        guard let delay = clock.timeUntilNextTick else {
+            timer = nil
+            return
+        }
         let next = Timer(timeInterval: delay, target: self, selector: #selector(tick), userInfo: nil, repeats: false)
         next.tolerance = 0.02
         RunLoop.main.add(next, forMode: .common)

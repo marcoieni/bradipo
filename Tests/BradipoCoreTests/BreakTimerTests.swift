@@ -167,6 +167,23 @@ func meetingDuringBreakPreservesItsDeadline(activityAtEnd: ActivityState) {
     #expect(timer.remainingSeconds == 20)
 }
 
+@Test(arguments: [false, true])
+func unavailableMacWaitsForWakeBeforeSchedulingMoreTicks(manuallyPaused: Bool) {
+    var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
+    timer.tick(at: 7, activity: .active)
+    timer.setManuallyPaused(manuallyPaused, at: 7)
+    timer.tick(at: 8, activity: .unavailable)
+    #expect(timer.timeUntilNextTick == nil)
+
+    // Wake is the first sample after a long absence, even if manual pause
+    // took precedence over the away message in the menu.
+    timer.tick(at: 3608, activity: .active)
+    #expect(timer.remainingSeconds == 20)
+    #expect(timer.timeUntilNextTick == 1)
+    timer.tick(at: 3609, activity: .active)
+    #expect(timer.remainingSeconds == (manuallyPaused ? 20 : 19))
+}
+
 @Test func resumeRespectsEnvironmentAndSleepResetsWork() {
     var timer = BreakTimer(workDuration: 100, breakDuration: 20, now: 0)
     timer.tick(at: 95, activity: .active)

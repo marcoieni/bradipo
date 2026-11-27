@@ -39,6 +39,17 @@ public struct BreakTimer: Sendable {
         return String(format: format, seconds / 60, seconds % 60)
     }
     public var timeUntilNextDisplayedSecond: TimeInterval { remaining - Double(remainingSeconds - 1) }
+    public var timeUntilNextTick: TimeInterval? {
+        // The workspace reports wake and session changes even without a timer.
+        guard activity != .unavailable else { return nil }
+        return switch pauseReason {
+        // A headset playing output can stay running when its input stops,
+        // so a due break needs to recheck even without a device notification.
+        case .meeting: 0.25
+        case nil: timeUntilNextDisplayedSecond
+        default: 1
+        }
+    }
     public var pauseReason: PauseReason? {
         guard phase == .working else { return nil }
         if isManuallyPaused { return .manual }
