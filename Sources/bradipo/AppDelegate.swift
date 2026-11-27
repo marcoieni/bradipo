@@ -31,6 +31,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let activity = ActivityMonitor()
     private var timer: Timer?
     private var startupPeek: SlothPeek?
+    /// Drawn over the countdown while reminders are paused. It's a subview because AppKit centers
+    /// an overlapping button image without the status item's padding, left of the title.
+    private let pauseSymbol = ClickThroughImageView()
 
     private let defaults = UserDefaults.standard
     @AppStorage(BreakAccent.defaultsKey) private var accent = BreakAccent.green
@@ -60,6 +63,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.action = #selector(openMenu(_:))
             button.sendAction(on: [.leftMouseDown, .rightMouseDown])
             button.title = clock.formattedRemainingTime
+            pauseSymbol.image = NSImage(systemSymbolName: "pause.fill", accessibilityDescription: nil)
+            pauseSymbol.symbolConfiguration = .init(pointSize: NSFont.systemFontSize, weight: .bold)
+            pauseSymbol.frame = button.bounds
+            pauseSymbol.autoresizingMask = [.width, .height]
+            pauseSymbol.setAccessibilityElement(false)
+            pauseSymbol.isHidden = true
+            button.addSubview(pauseSymbol)
             if let peek = SlothPeek(button: button) {
                 startupPeek = peek
                 button.toolTip = "bradipo · Starting work interval"
@@ -226,6 +236,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if let button = statusItem.button {
             button.title = time
+            // A paused countdown otherwise looks like a running one. Overlapping the title keeps the item's width.
+            let paused = clock.pauseReason == .manual
+            if paused { button.attributedTitle = button.attributedTitle.withForegroundColor(.tertiaryLabelColor) }
+            pauseSymbol.isHidden = !paused
             let description = reason ?? (resting ? clock.breakKind.title : "Work interval")
             button.toolTip = "bradipo · \(description)"
             button.setAccessibilityLabel("bradipo, \(description), \(time)")
@@ -399,6 +413,19 @@ private extension UserDefaults {
 
 extension BreakKind {
     var title: String { self == .short ? "Short break" : "Long break" }
+}
+
+extension NSAttributedString {
+    func withForegroundColor(_ color: NSColor) -> NSAttributedString {
+        let text = NSMutableAttributedString(attributedString: self)
+        text.addAttribute(.foregroundColor, value: color, range: NSRange(location: 0, length: text.length))
+        return text
+    }
+}
+
+/// Shows an image over another view without taking its clicks.
+private final class ClickThroughImageView: NSImageView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 extension NSWindow {
