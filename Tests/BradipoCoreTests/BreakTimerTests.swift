@@ -356,3 +356,90 @@ func unavailableMacWaitsForWakeBeforeSchedulingMoreTicks(manuallyPaused: Bool) {
     #expect(timer.breakKind == .long)
     #expect(timer.remainingSeconds == 300)
 }
+
+@Test func withLongBreaksOffEveryBreakIsShort() {
+    var timer = BreakTimer(workDuration: 10, breakDuration: 2, longBreakDuration: 8,
+                           shortBreaksBeforeLongBreak: 1, longBreaksEnabled: false, now: 0)
+    for cycle in 0..<4 {
+        let start = Double(cycle) * 12
+        #expect(timer.breakKind == .short)
+        #expect(timer.formattedBreakTime == "0:02")
+        timer.tick(at: start + 10, activity: .active)
+        #expect(timer.phase == .resting)
+        #expect(timer.breakKind == .short)
+        #expect(timer.remainingSeconds == 2)
+        timer.tick(at: start + 12, activity: .active)
+        #expect(timer.phase == .working)
+    }
+}
+
+@Test func turningLongBreaksOffMidCycleAndBackOnStartsANewCycle() {
+    var timer = BreakTimer(workDuration: 60, breakDuration: 10, longBreakDuration: 300,
+                           shortBreaksBeforeLongBreak: 2, now: 0)
+    timer.startBreak(at: 0)
+    timer.endBreak(at: 1)
+    timer.startBreak(at: 2)
+    timer.endBreak(at: 3)
+    #expect(timer.breakKind == .long)
+
+    // The due long break becomes short, and short breaks stop counting toward one.
+    timer.configure(workDuration: 60, breakDuration: 10, longBreaksEnabled: false, at: 4)
+    #expect(timer.shortBreaksRemaining == 2)
+    #expect(timer.breakKind == .short)
+    timer.startBreak(at: 4)
+    #expect(timer.remainingSeconds == 10)
+    timer.endBreak(at: 5)
+    timer.startBreak(at: 6)
+
+    // Turning long breaks back on during a short break counts neither that break nor earlier ones.
+    timer.configure(workDuration: 60, breakDuration: 10, longBreaksEnabled: true, at: 7)
+    #expect(timer.shortBreaksRemaining == 2)
+    timer.endBreak(at: 8)
+    #expect(timer.breakKind == .short)
+    timer.startBreak(at: 9)
+    timer.endBreak(at: 10)
+    timer.startBreak(at: 11)
+    timer.endBreak(at: 12)
+    #expect(timer.breakKind == .long)
+}
+
+@Test func turningLongBreaksOffAndBackOnBetweenBreaksStartsANewCycle() {
+    var timer = BreakTimer(workDuration: 60, breakDuration: 10, longBreakDuration: 300,
+                           shortBreaksBeforeLongBreak: 2, now: 0)
+    timer.startBreak(at: 0)
+    timer.endBreak(at: 1)
+    timer.startBreak(at: 2)
+    timer.endBreak(at: 3)
+    #expect(timer.breakKind == .long)
+
+    timer.configure(workDuration: 60, breakDuration: 10, longBreaksEnabled: false, at: 4)
+    timer.configure(workDuration: 60, breakDuration: 10, longBreaksEnabled: true, at: 5)
+    #expect(timer.shortBreaksRemaining == 2)
+    #expect(timer.breakKind == .short)
+}
+
+@Test func turningLongBreaksOffKeepsALongBreakInProgress() {
+    var timer = BreakTimer(workDuration: 60, breakDuration: 10, longBreakDuration: 300,
+                           shortBreaksBeforeLongBreak: 1, now: 0)
+    timer.startBreak(at: 0)
+    timer.endBreak(at: 1)
+    timer.startBreak(at: 2)
+    #expect(timer.breakKind == .long)
+
+    timer.configure(workDuration: 60, breakDuration: 10, longBreaksEnabled: false, at: 3)
+    timer.tick(at: 3, activity: .active)
+    #expect(timer.phase == .resting)
+    #expect(timer.breakKind == .long)
+    #expect(timer.remainingSeconds == 299)
+    timer.restart(at: 4)
+    #expect(timer.remainingSeconds == 300)
+
+    timer.tick(at: 304, activity: .active)
+    #expect(timer.phase == .working)
+    #expect(timer.breakKind == .short)
+    timer.startBreak(at: 305)
+    #expect(timer.remainingSeconds == 10)
+    timer.tick(at: 315, activity: .active)
+    #expect(timer.phase == .working)
+    #expect(timer.breakKind == .short)
+}

@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         (NSMenu(title: "Short break length"), "breakSeconds", [20, 30, 60, 120, 300]),
         (NSMenu(title: "Long break length"), "longBreakSeconds", [5, 10, 15, 20, 30].map { $0 * 60 }),
     ]
+    private let longBreaks = NSMenuItem(title: "Long Breaks", action: #selector(toggleLongBreaks), keyEquivalent: "")
+    private var longBreakLength = NSMenuItem()
     private let breakFrequency = NSMenuItem()
     private let showBanner = NSMenuItem(title: "Show Break Banner", action: #selector(BreakOverlay.toggleBanner),
                                         keyEquivalent: "")
@@ -39,11 +41,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     override init() {
         defaults.register(defaults: ["workSeconds": 20 * 60, "breakSeconds": 20, "pauseDuringMeetings": true,
                                      "longBreakSeconds": Int(BreakTimer.defaultLongBreakDuration),
-                                     "shortBreaksBeforeLongBreak": BreakTimer.defaultShortBreaksBeforeLongBreak])
+                                     "shortBreaksBeforeLongBreak": BreakTimer.defaultShortBreaksBeforeLongBreak,
+                                     "longBreaksEnabled": true])
         clock = BreakTimer(workDuration: defaults.duration(forKey: "workSeconds"),
                            breakDuration: defaults.duration(forKey: "breakSeconds"),
                            longBreakDuration: defaults.duration(forKey: "longBreakSeconds"),
                            shortBreaksBeforeLongBreak: max(1, defaults.integer(forKey: "shortBreaksBeforeLongBreak")),
+                           longBreaksEnabled: defaults.bool(forKey: "longBreaksEnabled"),
                            now: ProcessInfo.processInfo.systemUptime)
         super.init()
     }
@@ -106,7 +110,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(pause)
         menu.addItem(withTitle: "Restart Timer", action: #selector(restartTimer), keyEquivalent: "").target = self
         menu.addItem(.separator())
-        for setting in durations { addDurations(setting.menu, seconds: setting.presets) }
+        for setting in durations {
+            let item = addDurations(setting.menu, seconds: setting.presets)
+            if setting.key == "longBreakSeconds" { longBreakLength = item }
+        }
+        longBreaks.target = self
+        menu.insertItem(longBreaks, at: menu.index(of: longBreakLength))
         breakFrequency.target = self
         breakFrequency.action = #selector(editBreakFrequency)
         menu.addItem(breakFrequency)
@@ -136,10 +145,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         resetBanners.isEnabled = overlay.canResetBanners(timer: clock)
         meetingItem.state = deferBreaksDuringMeetings ? .on : .off
         login.refresh()
+        longBreaks.state = clock.longBreaksEnabled ? .on : .off
         for setting in durations {
             updateDurationMenu(setting.menu, seconds: Int(defaults.duration(forKey: setting.key)))
         }
         breakFrequency.title = "Long break after \(shortBreakCountLabel(clock.shortBreaksBeforeLongBreak))…"
+        for item in [longBreakLength, breakFrequency] { item.isEnabled = clock.longBreaksEnabled }
     }
 
     @objc private func openMenu(_ button: NSStatusBarButton) {
@@ -174,7 +185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.popUp(positioning: nil, at: position.pointValue, in: nil)
     }
 
-    private func addDurations(_ submenu: NSMenu, seconds: [Int]) {
+    private func addDurations(_ submenu: NSMenu, seconds: [Int]) -> NSMenuItem {
         for value in seconds {
             let label = value.isMultiple(of: 60) ? "\(value / 60) min" : "\(value) sec"
             let item = submenu.addItem(withTitle: label, action: #selector(changeDuration), keyEquivalent: "")
@@ -183,7 +194,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         submenu.addItem(.separator())
         submenu.addItem(withTitle: "Custom…", action: #selector(editDuration), keyEquivalent: "").target = self
-        menu.addItem(withTitle: submenu.title, action: nil, keyEquivalent: "").submenu = submenu
+        let item = menu.addItem(withTitle: submenu.title, action: nil, keyEquivalent: "")
+        item.submenu = submenu
+        return item
     }
 
     private func updateDurationMenu(_ submenu: NSMenu, seconds: Int) {
@@ -242,7 +255,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         timer = next
     }
 
-    private var breakActionSubtitle: String {
+    private var breakActionSubtitle: String? {
+        guard clock.longBreaksEnabled else { return nil }
         let remaining = clock.shortBreaksRemaining
         if clock.phase == .resting && clock.breakKind == .long {
             return "Next cycle · \(shortBreakCountLabel(remaining))"
@@ -277,6 +291,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleMeetingDeferral() {
         defaults.set(!deferBreaksDuringMeetings, forKey: "pauseDuringMeetings")
         tick()
+    }
+
+    @objc private func toggleLongBreaks() {
+        defaults.set(!clock.longBreaksEnabled, forKey: "longBreaksEnabled")
+        applySchedule()
     }
 
     @objc private func chooseAccentColor() {
@@ -363,7 +382,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         clock.configure(workDuration: defaults.duration(forKey: "workSeconds"),
                         breakDuration: defaults.duration(forKey: "breakSeconds"),
                         longBreakDuration: defaults.duration(forKey: "longBreakSeconds"),
-                        shortBreaksBeforeLongBreak: max(1, defaults.integer(forKey: "shortBreaksBeforeLongBreak")), at: now)
+                        shortBreaksBeforeLongBreak: max(1, defaults.integer(forKey: "shortBreaksBeforeLongBreak")),
+                        longBreaksEnabled: defaults.bool(forKey: "longBreaksEnabled"), at: now)
         tick()
     }
 }
