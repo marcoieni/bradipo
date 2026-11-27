@@ -50,7 +50,7 @@ final class BreakOverlay: NSObject {
         guard value != intensity.value else { return }
         let wasOff = intensity.value == 0
         intensity.value = value
-        if wasOff || value == 0 { updatePanels() }
+        if wasOff || value == 0 { updatePanels(keepGlowsBehindEditor: isPreviewingGlow) }
         // The slider tracks the mouse in a nested run loop. Flush the other
         // windows' SwiftUI layout and layer updates before the next drag event.
         for panel in glows {
@@ -82,7 +82,7 @@ final class BreakOverlay: NSObject {
     @objc private func displaysChanged() {
         dismiss(&glows)
         dismiss(&banners)
-        updatePanels()
+        updatePanels(keepGlowsBehindEditor: isPreviewingGlow)
     }
 
     private func dismiss(_ panels: inout [ReminderPanel]) {
@@ -90,7 +90,7 @@ final class BreakOverlay: NSObject {
         panels.removeAll()
     }
 
-    private func updatePanels(animated: Bool = false) {
+    private func updatePanels(animated: Bool = false, keepGlowsBehindEditor: Bool = false) {
         var added: [ReminderPanel] = []
         if intensity.value == 0 || (countdown == nil && !isPreviewingGlow) {
             dismiss(&glows)
@@ -113,8 +113,9 @@ final class BreakOverlay: NSObject {
         guard !added.isEmpty else { return }
         for panel in added {
             panel.alphaValue = animated ? 0 : 1
-            // Keep a glow restored by the slider behind the editor and any visible break cards.
-            if panel.ignoresMouseEvents && isPreviewingGlow {
+            // Opening the editor brings it forward after the glow. Rebuilding a glow
+            // under an already-open editor must preserve the editor and break cards above it.
+            if keepGlowsBehindEditor && panel.ignoresMouseEvents {
                 panel.orderBack(nil)
             } else {
                 panel.orderFrontRegardless()
