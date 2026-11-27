@@ -18,6 +18,7 @@ final class DurationEditor: NSObject, NSTextFieldDelegate {
         row.alignment = .firstBaseline
         for (field, label, value) in [(minutes, "Minutes", duration / 60), (seconds, "Seconds", duration % 60)] {
             field.stringValue = String(value)
+            field.placeholderString = "0"
             field.delegate = self
             field.setAccessibilityLabel(label)
             field.widthAnchor.constraint(equalToConstant: 48).isActive = true
@@ -31,8 +32,12 @@ final class DurationEditor: NSObject, NSTextFieldDelegate {
     }
 
     private var duration: Int? {
-        guard let m = Int(minutes.stringValue), (0...99).contains(m),
-              let s = Int(seconds.stringValue), (0...59).contains(s),
+        func component(_ field: NSTextField) -> Int? {
+            let text = field.stringValue
+            return text.isEmpty ? 0 : Int(text)
+        }
+        guard let m = component(minutes), (0...99).contains(m),
+              let s = component(seconds), (0...59).contains(s),
               m + s > 0 else { return nil }
         return m * 60 + s
     }
