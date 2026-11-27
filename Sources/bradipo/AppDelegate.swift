@@ -236,8 +236,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if let button = statusItem.button {
             let paused = clock.pauseReason == .manual
-            button.title = paused ? time.replacingOccurrences(of: ":", with: " ") : time
-            if paused { button.attributedTitle = button.attributedTitle.withForegroundColor(.tertiaryLabelColor) }
+            button.title = time
+            if paused {
+                // The colon would show between the pause symbol's bars.
+                let title = NSMutableAttributedString(attributedString: button.attributedTitle.withForegroundColor(.tertiaryLabelColor))
+                title.addAttribute(.foregroundColor, value: NSColor.clear, range: (time as NSString).range(of: ":"))
+                button.attributedTitle = title
+            }
             pauseSymbol.isHidden = !paused
             // The title is monospaced, so in m:ss the colon sits half a character left of center.
             let halfCharacter = button.attributedTitle.size().width / CGFloat(time.count) / 2
