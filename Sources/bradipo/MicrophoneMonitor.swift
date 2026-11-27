@@ -70,7 +70,8 @@ final class MicrophoneMonitor {
 
     var isInUse: Bool {
         if system == nil { observeSystem() }
-        if system != nil, needsDeviceRefresh, let devices = try? AudioHardwareSystem.shared.devices {
+        lazy var devices = try? AudioHardwareSystem.shared.devices
+        if system != nil, needsDeviceRefresh, let devices {
             let ids = Set(devices.map(\.id))
             observed = observed.filter { ids.contains($0.key) }
             for id in ids where observed[id] == nil {
@@ -84,8 +85,7 @@ final class MicrophoneMonitor {
         recorder = nil
         // Reading every audio client is costly, so skip it unless a device with input streams is running.
         // This assumes recorders use a listed device: Core Audio's device list leaves out hidden devices.
-        if let devices = try? AudioHardwareSystem.shared.devices,
-           !devices.contains(where: isRunningMicrophone) { return false }
+        if let devices, !devices.contains(where: isRunningMicrophone) { return false }
         let processes = (try? AudioHardwareSystem.shared.processes) ?? []
         recorder = processes.first(where: usesRunningMicrophone)
         return recorder != nil
