@@ -45,9 +45,11 @@ final class MicrophoneMonitor {
         PropertyAddress(kAudioHardwarePropertyDevices),
     ]
     private let running = [PropertyAddress(kAudioDevicePropertyDeviceIsRunningSomewhere)]
+    private let inputStreams = PropertyAddress(kAudioDevicePropertyStreams, scope: kAudioObjectPropertyScopeInput)
     private let inputDevices = PropertyAddress(kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeInput)
     private var observed: [AudioObjectID: Listener] = [:]
     private var needsDeviceRefresh = true
+    private var recorder: AudioHardwareProcess?
 
     init(onChange: @escaping @MainActor @Sendable () -> Void) {
         self.onChange = onChange
@@ -77,8 +79,24 @@ final class MicrophoneMonitor {
             // Retry on the next sample if Core Audio couldn't register a listener.
             needsDeviceRefresh = observed.count != ids.count
         }
+        // During a call the same process keeps recording, so check it first.
+        if let recorder, usesRunningMicrophone(recorder) { return true }
+        recorder = nil
+        // Reading every audio client is costly, so skip it unless a device with input streams is running.
+        // This assumes recorders use a listed device: Core Audio's device list leaves out hidden devices.
+        if let devices = try? AudioHardwareSystem.shared.devices,
+           !devices.contains(where: isRunningMicrophone) { return false }
         let processes = (try? AudioHardwareSystem.shared.processes) ?? []
-        return processes.contains(where: usesRunningMicrophone)
+        recorder = processes.first(where: usesRunningMicrophone)
+        return recorder != nil
+    }
+
+    private func isRunningMicrophone(_ device: AudioHardwareDevice) -> Bool {
+        // A device's stream configuration can change without a device-list change, so read it each time.
+        // Rule a device out only when it's known to be idle or to have no input streams,
+        // so an error costs a scan rather than a missed meeting.
+        (try? device.isRunningInAProcess) != false
+            && (try? device.propertyDataSize(address: inputStreams)) != 0
     }
 
     private func usesRunningMicrophone(_ process: AudioHardwareProcess) -> Bool {
