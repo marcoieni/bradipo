@@ -234,12 +234,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .unavailable: "Paused · Mac is away"
         case nil: nil
         }
+        let paused = clock.isManuallyPaused
         if let button = statusItem.button {
-            let paused = clock.pauseReason == .manual
             button.title = time
             if paused {
                 // The colon would show between the pause symbol's bars.
-                let title = NSMutableAttributedString(attributedString: button.attributedTitle.withForegroundColor(.tertiaryLabelColor))
+                let title = button.attributedTitle.withForegroundColor(.tertiaryLabelColor)
                 title.addAttribute(.foregroundColor, value: NSColor.clear, range: (time as NSString).range(of: ":"))
                 button.attributedTitle = title
             }
@@ -251,14 +251,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.toolTip = "bradipo · \(description)"
             button.setAccessibilityLabel("bradipo, \(description), \(time)")
         }
-        pauseStatus.isHidden = reason == nil || clock.pauseReason == .manual
+        pauseStatus.isHidden = reason == nil || paused
         pauseStatus.title = reason ?? ""
         takeBreak.title = resting ? "Stop \(clock.breakKind.title.lowercased())" : "Take a \(clock.breakKind.title.capitalized)"
         takeBreak.subtitle = breakActionSubtitle
         takeBreak.action = resting ? #selector(endBreak) : #selector(startBreak)
         takeBreak.isEnabled = resting || clock.canStartBreak
         pause.isEnabled = !resting
-        pause.title = clock.isManuallyPaused ? "Resume Reminders" : "Pause Reminders"
+        pause.title = paused ? "Resume Reminders" : "Pause Reminders"
         if resting {
             overlay.show(timer: clock)
         } else {
@@ -423,7 +423,7 @@ extension BreakKind {
 }
 
 extension NSAttributedString {
-    func withForegroundColor(_ color: NSColor) -> NSAttributedString {
+    func withForegroundColor(_ color: NSColor) -> NSMutableAttributedString {
         let text = NSMutableAttributedString(attributedString: self)
         text.addAttribute(.foregroundColor, value: color, range: NSRange(location: 0, length: text.length))
         return text
