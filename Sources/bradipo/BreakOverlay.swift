@@ -50,7 +50,7 @@ final class BreakOverlay: NSObject {
         guard value != intensity.value else { return }
         let wasOff = intensity.value == 0
         intensity.value = value
-        if wasOff || value == 0 { updatePanels(keepGlowsBehindEditor: isPreviewingGlow) }
+        if wasOff || value == 0 { updatePanels() }
         // The slider tracks the mouse in a nested run loop. Flush the other
         // windows' SwiftUI layout and layer updates before the next drag event.
         for panel in glows {
@@ -82,7 +82,7 @@ final class BreakOverlay: NSObject {
     @objc private func displaysChanged() {
         dismiss(&glows)
         dismiss(&banners)
-        updatePanels(keepGlowsBehindEditor: isPreviewingGlow)
+        updatePanels()
     }
 
     private func dismiss(_ panels: inout [ReminderPanel]) {
@@ -90,7 +90,7 @@ final class BreakOverlay: NSObject {
         panels.removeAll()
     }
 
-    private func updatePanels(animated: Bool = false, keepGlowsBehindEditor: Bool = false) {
+    private func updatePanels(animated: Bool = false) {
         var added: [ReminderPanel] = []
         if intensity.value == 0 || (countdown == nil && !isPreviewingGlow) {
             dismiss(&glows)
@@ -111,12 +111,16 @@ final class BreakOverlay: NSObject {
             dismiss(&banners)
         }
         guard !added.isEmpty else { return }
+        // AppKit lists visible windows front to back on the active Space.
+        // Insert each new glow immediately below the backmost editor or break card.
+        let anchor = NSWindow.windowNumbers()?.last { number in
+            NSApp.window(withWindowNumber: number.intValue) is BorderGlowEditor ||
+                banners.contains { $0.windowNumber == number.intValue }
+        }
         for panel in added {
             panel.alphaValue = animated ? 0 : 1
-            // Opening the editor brings it forward after the glow. Rebuilding a glow
-            // under an already-open editor must preserve the editor and break cards above it.
-            if keepGlowsBehindEditor && panel.ignoresMouseEvents {
-                panel.orderBack(nil)
+            if let anchor, glows.contains(panel) {
+                panel.order(.below, relativeTo: anchor.intValue)
             } else {
                 panel.orderFrontRegardless()
             }
