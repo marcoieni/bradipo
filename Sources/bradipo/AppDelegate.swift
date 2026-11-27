@@ -139,8 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for setting in durations {
             updateDurationMenu(setting.menu, seconds: Int(defaults.duration(forKey: setting.key)))
         }
-        let count = clock.shortBreaksBeforeLongBreak
-        breakFrequency.title = "Long break after \(count) short \(count == 1 ? "break" : "breaks")…"
+        breakFrequency.title = "Long break after \(shortBreakCountLabel(clock.shortBreaksBeforeLongBreak))…"
     }
 
     @objc private func openMenu(_ button: NSStatusBarButton) {
@@ -221,6 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pauseStatus.isHidden = reason == nil || clock.pauseReason == .manual
         pauseStatus.title = reason ?? ""
         takeBreak.title = resting ? "Stop \(clock.breakKind.title.lowercased())" : "Take a \(clock.breakKind.title.capitalized)"
+        takeBreak.subtitle = breakActionSubtitle
         takeBreak.action = resting ? #selector(endBreak) : #selector(startBreak)
         takeBreak.isEnabled = resting || clock.canStartBreak
         pause.isEnabled = !resting
@@ -240,6 +240,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         next.tolerance = 0.02
         RunLoop.main.add(next, forMode: .common)
         timer = next
+    }
+
+    private var breakActionSubtitle: String {
+        let remaining = clock.shortBreaksRemaining
+        if clock.phase == .resting && clock.breakKind == .long {
+            return "Next cycle · \(shortBreakCountLabel(remaining))"
+        }
+        if remaining == 0 {
+            let total = clock.shortBreaksBeforeLongBreak
+            return total == 1 ? "Short break taken" : "All \(shortBreakCountLabel(total)) taken"
+        }
+        return "\(shortBreakCountLabel(remaining)) until the long break"
+    }
+
+    private func shortBreakCountLabel(_ count: Int) -> String {
+        "\(count) short \(count == 1 ? "break" : "breaks")"
     }
 
     @objc private func startBreak() {
