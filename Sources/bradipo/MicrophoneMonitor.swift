@@ -95,8 +95,10 @@ final class MicrophoneMonitor {
         // A device's stream configuration can change without a device-list change, so read it each time.
         // Rule a device out only when it's known to be idle or to have no input streams,
         // so an error costs a scan rather than a missed meeting.
-        (try? device.isRunningInAProcess) != false
-            && (try? device.propertyDataSize(address: inputStreams)) != 0
+        // Check the streams first: asking the speakers whether they're running can block for about 150 ms
+        // while a voice-processing call starts or stops.
+        (try? device.propertyDataSize(address: inputStreams)) != 0
+            && (try? device.isRunningInAProcess) != false
     }
 
     private func usesRunningMicrophone(_ process: AudioHardwareProcess) -> Bool {
