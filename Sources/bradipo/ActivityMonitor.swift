@@ -43,7 +43,8 @@ final class ActivityMonitor {
             microphone = nil
         }
         if systemAsleep || screensAsleep || sessionInactive { return .unavailable }
-        if let microphone, microphone.isInUse || cameras.devices.contains(where: \.isInUseByAnotherApplication) {
+        // The camera check is cheap, so let it skip the Core Audio reads behind the microphone check.
+        if let microphone, cameras.devices.contains(where: \.isInUseByAnotherApplication) || microphone.isInUse {
             return .meeting
         }
 
