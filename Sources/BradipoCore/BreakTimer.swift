@@ -37,7 +37,7 @@ public struct BreakTimer: Sendable {
     public var phase: BreakPhase { activeBreak == nil ? .working : .resting }
     /// The current break while resting, or the next scheduled break while working.
     public var breakKind: BreakKind {
-        activeBreak?.kind ?? (shortBreaksTaken >= shortBreaksBeforeLongBreak ? .long : .short)
+        activeBreak?.kind ?? (shortBreaksRemaining == 0 ? .long : .short)
     }
     public private(set) var isManuallyPaused = false
     public private(set) var workDuration: TimeInterval
@@ -45,6 +45,8 @@ public struct BreakTimer: Sendable {
     public private(set) var breakDuration: TimeInterval
     public private(set) var longBreakDuration: TimeInterval
     public private(set) var shortBreaksBeforeLongBreak: Int
+    /// Excludes a short break already in progress. A long break starts a new cycle.
+    public var shortBreaksRemaining: Int { max(0, shortBreaksBeforeLongBreak - shortBreaksTaken) }
     public var remainingSeconds: Int { Int(ceil(remaining)) }
     public var formattedRemainingTime: String {
         Self.formatted(seconds: remainingSeconds, duration: activeBreak?.duration ?? workDuration)

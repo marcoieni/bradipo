@@ -258,11 +258,14 @@ func unavailableMacWaitsForWakeBeforeSchedulingMoreTicks(manuallyPaused: Bool) {
 @Test func twoShortBreaksThenALongBreakRepeatAcrossWorkIntervals() {
     var timer = BreakTimer(workDuration: 10, breakDuration: 2, longBreakDuration: 8,
                            shortBreaksBeforeLongBreak: 2, now: 0)
+    #expect(timer.shortBreaksRemaining == 2)
     timer.tick(at: 10, activity: .active)
+    #expect(timer.shortBreaksRemaining == 1)
     #expect(timer.breakKind == .short)
     #expect(timer.remainingSeconds == 2)
     timer.tick(at: 12, activity: .active)
     timer.tick(at: 22, activity: .active)
+    #expect(timer.shortBreaksRemaining == 0)
     #expect(timer.breakKind == .short)
     #expect(timer.remainingSeconds == 2)
     timer.tick(at: 24, activity: .active)
@@ -273,9 +276,11 @@ func unavailableMacWaitsForWakeBeforeSchedulingMoreTicks(manuallyPaused: Bool) {
     // A meeting defers the due long break without consuming its slot.
     timer.tick(at: 34, activity: .meeting)
     timer.startBreak(at: 35)
+    #expect(timer.shortBreaksRemaining == 0)
     #expect(timer.phase == .working)
     #expect(timer.pauseReason == .meeting)
     timer.tick(at: 40, activity: .active)
+    #expect(timer.shortBreaksRemaining == 2)
     #expect(timer.phase == .resting)
     #expect(timer.breakKind == .long)
     #expect(timer.remainingSeconds == 8)
@@ -283,6 +288,24 @@ func unavailableMacWaitsForWakeBeforeSchedulingMoreTicks(manuallyPaused: Bool) {
     timer.tick(at: 58, activity: .active)
     #expect(timer.breakKind == .short)
     #expect(timer.remainingSeconds == 2)
+}
+
+@Test func editingTheFrequencyRecountsTheShortBreaksStillToCome() {
+    var timer = BreakTimer(workDuration: 60, breakDuration: 10, shortBreaksBeforeLongBreak: 3, now: 0)
+    timer.startBreak(at: 1)
+    timer.endBreak(at: 2)
+    timer.startBreak(at: 3)
+
+    // Two short breaks have started, so lowering the target to one makes the long break next.
+    timer.configure(workDuration: 60, breakDuration: 10, shortBreaksBeforeLongBreak: 1, at: 4)
+    #expect(timer.shortBreaksRemaining == 0)
+    timer.endBreak(at: 5)
+    #expect(timer.breakKind == .long)
+
+    // Raising the target again preserves both short breaks already taken.
+    timer.configure(workDuration: 60, breakDuration: 10, shortBreaksBeforeLongBreak: 4, at: 6)
+    #expect(timer.shortBreaksRemaining == 2)
+    #expect(timer.breakKind == .short)
 }
 
 @Test func frequencyAndLengthEditsPreserveProgressAndTheActiveBreak() {
