@@ -45,6 +45,9 @@ public struct BreakTimer: Sendable {
     public private(set) var breakDuration: TimeInterval
     public private(set) var longBreakDuration: TimeInterval
     public private(set) var shortBreaksBeforeLongBreak: Int
+    /// While off, every break is short and none count toward a long break, so turning
+    /// long breaks back on starts a new cycle. A long break already in progress keeps running.
+    public private(set) var longBreaksEnabled: Bool
     /// Excludes a short break already in progress. A long break starts a new cycle.
     public var shortBreaksRemaining: Int { max(0, shortBreaksBeforeLongBreak - shortBreaksTaken) }
     public var remainingSeconds: Int { Int(ceil(remaining)) }
@@ -99,12 +102,14 @@ public struct BreakTimer: Sendable {
 
     public init(workDuration: TimeInterval, breakDuration: TimeInterval,
                 longBreakDuration: TimeInterval = Self.defaultLongBreakDuration,
-                shortBreaksBeforeLongBreak: Int = Self.defaultShortBreaksBeforeLongBreak, now: TimeInterval) {
+                shortBreaksBeforeLongBreak: Int = Self.defaultShortBreaksBeforeLongBreak,
+                longBreaksEnabled: Bool = true, now: TimeInterval) {
         precondition(workDuration >= 1 && breakDuration >= 1 && longBreakDuration >= 1 && shortBreaksBeforeLongBreak >= 1)
         self.workDuration = workDuration
         self.breakDuration = breakDuration
         self.longBreakDuration = longBreakDuration
         self.shortBreaksBeforeLongBreak = shortBreaksBeforeLongBreak
+        self.longBreaksEnabled = longBreaksEnabled
         remaining = workDuration
         lastTick = now
     }
@@ -163,14 +168,15 @@ public struct BreakTimer: Sendable {
         let kind = breakKind
         let duration = nextBreakDuration
         activeBreak = (kind, duration)
-        shortBreaksTaken = kind == .short ? shortBreaksTaken + 1 : 0
+        shortBreaksTaken = kind == .short && longBreaksEnabled ? shortBreaksTaken + 1 : 0
         remaining = duration
         lastTick = now
     }
 
     public mutating func configure(
         workDuration: TimeInterval, breakDuration: TimeInterval,
-        longBreakDuration: TimeInterval? = nil, shortBreaksBeforeLongBreak: Int? = nil, at now: TimeInterval
+        longBreakDuration: TimeInterval? = nil, shortBreaksBeforeLongBreak: Int? = nil,
+        longBreaksEnabled: Bool? = nil, at now: TimeInterval
     ) {
         let longDuration = longBreakDuration ?? self.longBreakDuration
         let shortCount = shortBreaksBeforeLongBreak ?? self.shortBreaksBeforeLongBreak
@@ -183,5 +189,7 @@ public struct BreakTimer: Sendable {
         self.breakDuration = breakDuration
         self.longBreakDuration = longDuration
         self.shortBreaksBeforeLongBreak = shortCount
+        self.longBreaksEnabled = longBreaksEnabled ?? self.longBreaksEnabled
+        if !self.longBreaksEnabled { shortBreaksTaken = 0 }
     }
 }
