@@ -103,11 +103,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pauseStatus.isEnabled = false
         menu.addItem(pauseStatus)
 
-        takeBreak.target = self
-        menu.addItem(takeBreak)
         pause.target = self
         pause.action = #selector(togglePause)
         menu.addItem(pause)
+        takeBreak.target = self
+        menu.addItem(takeBreak)
         menu.addItem(withTitle: "Restart Timer", action: #selector(restartTimer), keyEquivalent: "").target = self
         menu.addItem(.separator())
         for setting in durations {
