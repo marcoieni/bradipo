@@ -69,11 +69,7 @@ To install it, drag the built `bradipo.app` into Applications.
 
 ### Test
 
-Run `swift test` with Xcode selected. With the standalone Command Line Tools, supply the bundled Swift Testing plug-in path.
-
-```sh
-swift test -Xswiftc -plugin-path -Xswiftc "$(xcode-select -p)/usr/lib/swift/host/plugins/testing"
-```
+Run `swift test`.
 
 ### Release
 
