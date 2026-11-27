@@ -3,59 +3,82 @@ import CoreAudio
 @MainActor
 final class MicrophoneMonitor {
     private struct Listener: PropertyListenerDelegate {
-        let onChange: @MainActor @Sendable () -> Void
+        let onChange: @MainActor @Sendable ([AudioObjectPropertyAddress]) -> Void
 
         func propertiesChanged(properties: [AudioObjectPropertyAddress]) {
-            MainActor.assumeIsolated { onChange() }
+            MainActor.assumeIsolated { onChange(properties) }
         }
     }
 
-    private let listener: Listener
-    // Keep this monitor's delegates off the shared AudioHardwareSystem instance.
-    private let system = AudioHardwareObject(id: AudioObjectID(kAudioObjectSystemObject))
-    private let deviceList = [PropertyAddress(kAudioHardwarePropertyDevices)]
+    private let onChange: @MainActor @Sendable () -> Void
+    private var system: AudioHardwareObject?
+    private let systemProperties = [
+        PropertyAddress(kAudioHardwarePropertyServiceRestarted),
+        PropertyAddress(kAudioHardwarePropertyDevices),
+    ]
     private let running = [PropertyAddress(kAudioDevicePropertyDeviceIsRunningSomewhere)]
     private let inputDevices = PropertyAddress(kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeInput)
     private var observed: [AudioObjectID: AudioHardwareDevice] = [:]
-    private var observesDeviceList = false
     private var needsDeviceRefresh = true
 
     init(onChange: @escaping @MainActor @Sendable () -> Void) {
-        listener = Listener(onChange: onChange)
-        system.delegates = [Listener { [weak self] in
+        self.onChange = onChange
+    }
+
+    private func observeSystem() {
+        // Each service generation gets its own registrations, even when it reuses device IDs.
+        let system = AudioHardwareObject(id: AudioObjectID(kAudioObjectSystemObject))
+        system.delegates = [Listener { [weak self] properties in
             guard let self else { return }
+            if properties.contains(where: { $0.mSelector == kAudioHardwarePropertyServiceRestarted }) {
+                removeListeners()
+            }
             needsDeviceRefresh = true
             onChange()
         }]
-        observesDeviceList = (try? system.addListener(forProperties: deviceList, dispatchQueue: .main)) != nil
+        do {
+            try system.addListener(forProperties: systemProperties, dispatchQueue: .main)
+            self.system = system
+        } catch {
+            stopObserving(system, properties: systemProperties)
+        }
     }
 
     isolated deinit {
-        system.delegates = []
-        if observesDeviceList { try? system.removeListener(forProperties: deviceList, dispatchQueue: .main) }
-        for device in observed.values { stopObserving(device) }
+        removeListeners()
     }
 
-    private func stopObserving(_ device: AudioHardwareDevice) {
-        device.delegates = []
-        try? device.removeListener(forProperties: running, dispatchQueue: .main)
+    private func removeListeners() {
+        if let system { stopObserving(system, properties: systemProperties) }
+        system = nil
+        for device in observed.values { stopObserving(device, properties: running) }
+        observed.removeAll()
+    }
+
+    private func stopObserving(_ object: AudioHardwareObject, properties: [AudioObjectPropertyAddress]) {
+        object.delegates = []
+        // A failed registration or a service reset may leave only some properties registered.
+        for property in properties {
+            try? object.removeListener(forProperties: [property], dispatchQueue: .main)
+        }
     }
 
     var isInUse: Bool {
+        if system == nil { observeSystem() }
         if needsDeviceRefresh, let devices = try? AudioHardwareSystem.shared.devices {
             let ids = Set(devices.map(\.id))
             for (id, device) in observed where !ids.contains(id) {
-                stopObserving(device)
+                stopObserving(device, properties: running)
                 observed.removeValue(forKey: id)
             }
             for device in devices where observed[device.id] == nil {
-                device.delegates = [listener]
+                device.delegates = [Listener { [onChange] _ in onChange() }]
                 if (try? device.addListener(forProperties: running, dispatchQueue: .main)) != nil {
                     observed[device.id] = device
                 }
             }
             // Retry on the next sample if Core Audio couldn't register a listener.
-            needsDeviceRefresh = !observesDeviceList || observed.count != ids.count
+            needsDeviceRefresh = system == nil || observed.count != ids.count
         }
         let processes = (try? AudioHardwareSystem.shared.processes) ?? []
         return processes.contains(where: usesRunningMicrophone)
