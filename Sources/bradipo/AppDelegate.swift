@@ -31,8 +31,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let activity = ActivityMonitor()
     private var timer: Timer?
     private var startupPeek: SlothPeek?
-    /// Drawn over the countdown while reminders are paused. It's a subview because AppKit centers
-    /// an overlapping button image without the status item's padding, left of the title.
+    /// Drawn over the countdown's colon while reminders are paused. It's a subview because AppKit places
+    /// an `.imageOverlaps` button image without the status item's padding, so it lands left of the digits,
+    /// and a wide image shifts the digits instead.
     private let pauseSymbol = ClickThroughImageView()
 
     private let defaults = UserDefaults.standard
@@ -65,7 +66,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.title = clock.formattedRemainingTime
             pauseSymbol.image = NSImage(systemSymbolName: "pause.fill", accessibilityDescription: nil)
             pauseSymbol.symbolConfiguration = .init(pointSize: NSFont.systemFontSize, weight: .bold)
-            pauseSymbol.frame = button.bounds
             pauseSymbol.autoresizingMask = [.width, .height]
             pauseSymbol.setAccessibilityElement(false)
             pauseSymbol.isHidden = true
@@ -236,10 +236,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if let button = statusItem.button {
             button.title = time
-            // A paused countdown otherwise looks like a running one. Overlapping the title keeps the item's width.
             let paused = clock.pauseReason == .manual
             if paused { button.attributedTitle = button.attributedTitle.withForegroundColor(.tertiaryLabelColor) }
             pauseSymbol.isHidden = !paused
+            // The title is monospaced, so in m:ss the colon sits half a character left of center.
+            let halfCharacter = button.attributedTitle.size().width / CGFloat(time.count) / 2
+            pauseSymbol.frame = button.bounds.offsetBy(dx: time.count == 4 ? -halfCharacter : 0, dy: 0)
             let description = reason ?? (resting ? clock.breakKind.title : "Work interval")
             button.toolTip = "bradipo · \(description)"
             button.setAccessibilityLabel("bradipo, \(description), \(time)")
