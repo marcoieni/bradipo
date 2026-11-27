@@ -26,16 +26,38 @@ public enum BreakPhase: Equatable, Sendable {
     case working, resting
 }
 
+public enum BreakKind: Sendable {
+    case short, long
+}
+
 public struct BreakTimer: Sendable {
-    public var phase: BreakPhase { activeBreakDuration == nil ? .working : .resting }
+    public static let defaultLongBreakDuration: TimeInterval = 5 * 60
+    public static let defaultShortBreaksBeforeLongBreak = 3
+
+    public var phase: BreakPhase { activeBreak == nil ? .working : .resting }
+    /// The current break while resting, or the next scheduled break while working.
+    public var breakKind: BreakKind {
+        activeBreak?.kind ?? (shortBreaksTaken >= shortBreaksBeforeLongBreak ? .long : .short)
+    }
     public private(set) var isManuallyPaused = false
     public private(set) var workDuration: TimeInterval
+    /// The short break length, including preferences saved before long breaks were introduced.
     public private(set) var breakDuration: TimeInterval
+    public private(set) var longBreakDuration: TimeInterval
+    public private(set) var shortBreaksBeforeLongBreak: Int
     public var remainingSeconds: Int { Int(ceil(remaining)) }
     public var formattedRemainingTime: String {
-        let duration = activeBreakDuration ?? workDuration
+        Self.formatted(seconds: remainingSeconds, duration: activeBreak?.duration ?? workDuration)
+    }
+    /// Also supplies the natural banner width between breaks.
+    public var formattedBreakTime: String {
+        if activeBreak != nil { return formattedRemainingTime }
+        let duration = nextBreakDuration
+        return Self.formatted(seconds: Int(ceil(duration)), duration: duration)
+    }
+
+    private static func formatted(seconds: Int, duration: TimeInterval) -> String {
         let format = ceil(duration) < 10 * 60 ? "%d:%02d" : "%02d:%02d"
-        let seconds = remainingSeconds
         return String(format: format, seconds / 60, seconds % 60)
     }
     public var timeUntilNextDisplayedSecond: TimeInterval { remaining - Double(remainingSeconds - 1) }
@@ -65,16 +87,22 @@ public struct BreakTimer: Sendable {
         phase == .working && !isManuallyPaused && activity != .meeting && activity != .unavailable
     }
 
-    private var activeBreakDuration: TimeInterval?
+    private var shortBreaksTaken = 0
+    private var activeBreak: (kind: BreakKind, duration: TimeInterval)?
+    private var nextBreakDuration: TimeInterval { breakKind == .long ? longBreakDuration : breakDuration }
     private var remaining: TimeInterval
     private var lastTick: TimeInterval
     private var activity: ActivityState = .active
     private var lastMeetingEnd: TimeInterval?
 
-    public init(workDuration: TimeInterval, breakDuration: TimeInterval, now: TimeInterval) {
-        precondition(workDuration >= 1 && breakDuration >= 1)
+    public init(workDuration: TimeInterval, breakDuration: TimeInterval,
+                longBreakDuration: TimeInterval = Self.defaultLongBreakDuration,
+                shortBreaksBeforeLongBreak: Int = Self.defaultShortBreaksBeforeLongBreak, now: TimeInterval) {
+        precondition(workDuration >= 1 && breakDuration >= 1 && longBreakDuration >= 1 && shortBreaksBeforeLongBreak >= 1)
         self.workDuration = workDuration
         self.breakDuration = breakDuration
+        self.longBreakDuration = longBreakDuration
+        self.shortBreaksBeforeLongBreak = shortBreaksBeforeLongBreak
         remaining = workDuration
         lastTick = now
     }
@@ -110,14 +138,14 @@ public struct BreakTimer: Sendable {
     }
 
     public mutating func restart(at now: TimeInterval) {
-        remaining = activeBreakDuration ?? workDuration
+        remaining = activeBreak?.duration ?? workDuration
         isManuallyPaused = false
         lastTick = now
     }
 
     public mutating func endBreak(at now: TimeInterval) {
         guard phase == .resting else { return }
-        activeBreakDuration = nil
+        activeBreak = nil
         restart(at: now)
     }
 
@@ -130,20 +158,28 @@ public struct BreakTimer: Sendable {
     public mutating func startBreak(at now: TimeInterval) {
         // Assistive input can activate the menu without resetting macOS's idle clock.
         guard canStartBreak else { return }
-        activeBreakDuration = breakDuration
-        remaining = breakDuration
+        let kind = breakKind
+        let duration = nextBreakDuration
+        activeBreak = (kind, duration)
+        shortBreaksTaken = kind == .short ? shortBreaksTaken + 1 : 0
+        remaining = duration
         lastTick = now
     }
 
     public mutating func configure(
-        workDuration: TimeInterval, breakDuration: TimeInterval, at now: TimeInterval
+        workDuration: TimeInterval, breakDuration: TimeInterval,
+        longBreakDuration: TimeInterval? = nil, shortBreaksBeforeLongBreak: Int? = nil, at now: TimeInterval
     ) {
-        precondition(workDuration >= 1 && breakDuration >= 1)
+        let longDuration = longBreakDuration ?? self.longBreakDuration
+        let shortCount = shortBreaksBeforeLongBreak ?? self.shortBreaksBeforeLongBreak
+        precondition(workDuration >= 1 && breakDuration >= 1 && longDuration >= 1 && shortCount >= 1)
         if phase == .working && self.workDuration != workDuration {
             remaining = workDuration
             lastTick = now
         }
         self.workDuration = workDuration
         self.breakDuration = breakDuration
+        self.longBreakDuration = longDuration
+        self.shortBreaksBeforeLongBreak = shortCount
     }
 }

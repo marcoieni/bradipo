@@ -66,12 +66,10 @@ final class BreakOverlay: NSObject {
         CATransaction.flush()
     }
 
-    func canResetBanners(breakDuration: TimeInterval) -> Bool {
+    func canResetBanners(timer: BreakTimer) -> Bool {
         let frames = NSScreen.screens.reduce(into: [String: CGRect]()) { $0[$1.bannerDisplayID] = $1.visibleFrame }
         return BreakCardPlacement.canReset(visibleFrames: frames) {
-            // Between breaks, measure the banner with the upcoming break's timer width.
-            let timer = BreakTimer(workDuration: breakDuration, breakDuration: breakDuration, now: 0)
-            return makeCard(countdown: countdown ?? BreakCountdown(timer: timer)).fittingSize
+            makeCard(countdown: countdown ?? BreakCountdown(timer: timer)).fittingSize
         }
     }
 
@@ -432,7 +430,7 @@ private struct BreakCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { onEndBreak() }
-        .accessibilityLabel("End break")
+        .accessibilityLabel("End \(countdown.timer.breakKind.title.lowercased())")
         .accessibilityValue("\(countdown.timer.remainingSeconds) seconds remaining")
     }
 
@@ -446,13 +444,13 @@ private struct BreakCard: View {
                     .frame(width: 42, height: 42)
                     .background(cream, in: Circle())
             }
-            Text("Rest your eyes")
+            Text(verbatim: countdown.timer.breakKind.title)
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
                 .foregroundStyle(cream)
             Rectangle()
                 .fill(accent.divider.opacity(0.40))
                 .frame(width: 1, height: 18)
-            Text(verbatim: countdown.timer.formattedRemainingTime)
+            Text(verbatim: countdown.timer.formattedBreakTime)
                 .font(.system(size: 14, weight: .medium, design: .monospaced))
                 .foregroundStyle(accent.countdown)
         }

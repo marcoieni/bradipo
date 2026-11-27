@@ -10,8 +10,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let pauseStatus = NSMenuItem()
     private let takeBreak = NSMenuItem()
     private let pause = NSMenuItem()
-    private let workMenu = NSMenu(title: "Work interval")
-    private let breakMenu = NSMenu(title: "Break length")
+    private let durations: [(menu: NSMenu, key: String, presets: [Int])] = [
+        (NSMenu(title: "Work interval"), "workSeconds", [5, 10, 20, 30, 45, 60].map { $0 * 60 }),
+        (NSMenu(title: "Short break length"), "breakSeconds", [20, 30, 60, 120, 300]),
+        (NSMenu(title: "Long break length"), "longBreakSeconds", [5, 10, 15, 20, 30].map { $0 * 60 }),
+    ]
+    private let breakFrequency = NSMenuItem()
     private let showBanner = NSMenuItem(title: "Show Break Banner", action: #selector(BreakOverlay.toggleBanner),
                                         keyEquivalent: "")
     private let resetBanners = NSMenuItem(title: "Reset Banner Size and Position", action: #selector(BreakOverlay.resetBanners),
@@ -33,10 +37,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
     override init() {
-        defaults.register(defaults: ["workSeconds": 20 * 60, "breakSeconds": 20, "pauseDuringMeetings": true])
-        let workSeconds = min(5999, max(1, defaults.integer(forKey: "workSeconds")))
-        let breakSeconds = min(5999, max(1, defaults.integer(forKey: "breakSeconds")))
-        clock = BreakTimer(workDuration: Double(workSeconds), breakDuration: Double(breakSeconds),
+        defaults.register(defaults: ["workSeconds": 20 * 60, "breakSeconds": 20, "pauseDuringMeetings": true,
+                                     "longBreakSeconds": Int(BreakTimer.defaultLongBreakDuration),
+                                     "shortBreaksBeforeLongBreak": BreakTimer.defaultShortBreaksBeforeLongBreak])
+        clock = BreakTimer(workDuration: defaults.duration(forKey: "workSeconds"),
+                           breakDuration: defaults.duration(forKey: "breakSeconds"),
+                           longBreakDuration: defaults.duration(forKey: "longBreakSeconds"),
+                           shortBreaksBeforeLongBreak: max(1, defaults.integer(forKey: "shortBreaksBeforeLongBreak")),
                            now: ProcessInfo.processInfo.systemUptime)
         super.init()
     }
@@ -99,10 +106,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(pause)
         menu.addItem(withTitle: "Restart Timer", action: #selector(restartTimer), keyEquivalent: "").target = self
         menu.addItem(.separator())
-        addDurations(workMenu, seconds: [5, 10, 20, 30, 45, 60].map { $0 * 60 },
-                     action: #selector(changeWork), customAction: #selector(editWorkDuration))
-        addDurations(breakMenu, seconds: [20, 30, 60, 120, 300],
-                     action: #selector(changeBreak), customAction: #selector(editBreakDuration))
+        for setting in durations { addDurations(setting.menu, seconds: setting.presets) }
+        breakFrequency.target = self
+        breakFrequency.action = #selector(editBreakFrequency)
+        menu.addItem(breakFrequency)
         menu.addItem(withTitle: "Accent Color…", action: #selector(chooseAccentColor), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Border Glow Intensity…", action: #selector(editGlowIntensity),
                      keyEquivalent: "").target = self
@@ -126,11 +133,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         showBanner.state = overlay.showsBanner ? .on : .off
-        resetBanners.isEnabled = overlay.canResetBanners(breakDuration: clock.breakDuration)
+        resetBanners.isEnabled = overlay.canResetBanners(timer: clock)
         meetingItem.state = deferBreaksDuringMeetings ? .on : .off
         login.refresh()
-        updateDurationMenu(workMenu, seconds: Int(clock.workDuration))
-        updateDurationMenu(breakMenu, seconds: Int(clock.breakDuration))
+        for setting in durations {
+            updateDurationMenu(setting.menu, seconds: Int(defaults.duration(forKey: setting.key)))
+        }
+        let count = clock.shortBreaksBeforeLongBreak
+        breakFrequency.title = "Long break after \(count) short \(count == 1 ? "break" : "breaks")…"
     }
 
     @objc private func openMenu(_ button: NSStatusBarButton) {
@@ -165,15 +175,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.popUp(positioning: nil, at: position.pointValue, in: nil)
     }
 
-    private func addDurations(_ submenu: NSMenu, seconds: [Int], action: Selector, customAction: Selector) {
+    private func addDurations(_ submenu: NSMenu, seconds: [Int]) {
         for value in seconds {
             let label = value.isMultiple(of: 60) ? "\(value / 60) min" : "\(value) sec"
-            let item = submenu.addItem(withTitle: label, action: action, keyEquivalent: "")
+            let item = submenu.addItem(withTitle: label, action: #selector(changeDuration), keyEquivalent: "")
             item.target = self
             item.tag = value
         }
         submenu.addItem(.separator())
-        submenu.addItem(withTitle: "Custom…", action: customAction, keyEquivalent: "").target = self
+        submenu.addItem(withTitle: "Custom…", action: #selector(editDuration), keyEquivalent: "").target = self
         menu.addItem(withTitle: submenu.title, action: nil, keyEquivalent: "").submenu = submenu
     }
 
@@ -184,12 +194,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for item in submenu.items where !item.isSeparatorItem {
             item.state = item === selected ? .on : .off
         }
-    }
-
-    private func selectedDuration(_ sender: NSMenuItem, current: TimeInterval) -> Int? {
-        guard let submenu = sender.menu else { return nil }
-        let isCustom = sender.tag == 0
-        return isCustom ? DurationEditor(title: submenu.title, duration: Int(current)).run() : sender.tag
     }
 
     @objc private func tick() {
@@ -203,20 +207,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let resting = clock.phase == .resting
         let reason: String? = switch clock.pauseReason {
         case .manual: "Reminders paused"
-        case .meeting: "Break due · Mic or camera in use"
+        case .meeting: "\(clock.breakKind.title) due · Mic or camera in use"
         case .idle: "Paused · Mac is idle"
         case .unavailable: "Paused · Mac is away"
         case nil: nil
         }
         if let button = statusItem.button {
             button.title = time
-            let description = reason ?? (resting ? "Rest your eyes" : "Work interval")
+            let description = reason ?? (resting ? clock.breakKind.title : "Work interval")
             button.toolTip = "bradipo · \(description)"
             button.setAccessibilityLabel("bradipo, \(description), \(time)")
         }
         pauseStatus.isHidden = reason == nil || clock.pauseReason == .manual
         pauseStatus.title = reason ?? ""
-        takeBreak.title = resting ? "Stop break" : "Take a Break"
+        takeBreak.title = resting ? "Stop \(clock.breakKind.title.lowercased())" : "Take a \(clock.breakKind.title.capitalized)"
         takeBreak.action = resting ? #selector(endBreak) : #selector(startBreak)
         takeBreak.isEnabled = resting || clock.canStartBreak
         pause.isEnabled = !resting
@@ -314,27 +318,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         tick()
     }
 
-    @objc private func editWorkDuration(_ sender: NSMenuItem) {
-        afterMenuCloses(#selector(changeWork), with: sender)
+    @objc private func editDuration(_ sender: NSMenuItem) {
+        afterMenuCloses(#selector(changeDuration), with: sender)
     }
 
-    @objc private func changeWork(_ sender: NSMenuItem) {
-        guard let seconds = selectedDuration(sender, current: clock.workDuration) else { return }
-        defaults.set(seconds, forKey: "workSeconds")
-        clock.configure(workDuration: Double(seconds), breakDuration: clock.breakDuration, at: now)
+    @objc private func changeDuration(_ sender: NSMenuItem) {
+        guard let setting = durations.first(where: { $0.menu === sender.menu }) else { return }
+        let current = Int(defaults.duration(forKey: setting.key))
+        let seconds = sender.tag == 0
+            ? IntervalEditor(title: setting.menu.title, setting: .duration(current)).run() : sender.tag
+        guard let seconds else { return }
+        defaults.set(seconds, forKey: setting.key)
+        applySchedule()
+    }
+
+    @objc private func editBreakFrequency() {
+        afterMenuCloses(#selector(changeBreakFrequency))
+    }
+
+    @objc private func changeBreakFrequency() {
+        let editor = IntervalEditor(title: "Long break frequency", setting: .shortBreakCount(clock.shortBreaksBeforeLongBreak))
+        guard let count = editor.run() else { return }
+        defaults.set(count, forKey: "shortBreaksBeforeLongBreak")
+        applySchedule()
+    }
+
+    private func applySchedule() {
+        clock.configure(workDuration: defaults.duration(forKey: "workSeconds"),
+                        breakDuration: defaults.duration(forKey: "breakSeconds"),
+                        longBreakDuration: defaults.duration(forKey: "longBreakSeconds"),
+                        shortBreaksBeforeLongBreak: max(1, defaults.integer(forKey: "shortBreaksBeforeLongBreak")), at: now)
         tick()
     }
+}
 
-    @objc private func editBreakDuration(_ sender: NSMenuItem) {
-        afterMenuCloses(#selector(changeBreak), with: sender)
+private extension UserDefaults {
+    func duration(forKey key: String) -> TimeInterval {
+        TimeInterval(min(5999, max(1, integer(forKey: key))))
     }
+}
 
-    @objc private func changeBreak(_ sender: NSMenuItem) {
-        guard let seconds = selectedDuration(sender, current: clock.breakDuration) else { return }
-        defaults.set(seconds, forKey: "breakSeconds")
-        clock.configure(workDuration: clock.workDuration, breakDuration: Double(seconds), at: now)
-        tick()
-    }
+extension BreakKind {
+    var title: String { self == .short ? "Short break" : "Long break" }
 }
 
 extension NSWindow {

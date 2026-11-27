@@ -254,3 +254,82 @@ func unavailableMacWaitsForWakeBeforeSchedulingMoreTicks(manuallyPaused: Bool) {
     #expect(timer.phase == .working)
     #expect(timer.remainingSeconds == 110)
 }
+
+@Test func twoShortBreaksThenALongBreakRepeatAcrossWorkIntervals() {
+    var timer = BreakTimer(workDuration: 10, breakDuration: 2, longBreakDuration: 8,
+                           shortBreaksBeforeLongBreak: 2, now: 0)
+    timer.tick(at: 10, activity: .active)
+    #expect(timer.breakKind == .short)
+    #expect(timer.remainingSeconds == 2)
+    timer.tick(at: 12, activity: .active)
+    timer.tick(at: 22, activity: .active)
+    #expect(timer.breakKind == .short)
+    #expect(timer.remainingSeconds == 2)
+    timer.tick(at: 24, activity: .active)
+    #expect(timer.phase == .working)
+    #expect(timer.breakKind == .long)
+    #expect(timer.formattedBreakTime == "0:08")
+
+    // A meeting defers the due long break without consuming its slot.
+    timer.tick(at: 34, activity: .meeting)
+    timer.startBreak(at: 35)
+    #expect(timer.phase == .working)
+    #expect(timer.pauseReason == .meeting)
+    timer.tick(at: 40, activity: .active)
+    #expect(timer.phase == .resting)
+    #expect(timer.breakKind == .long)
+    #expect(timer.remainingSeconds == 8)
+    timer.tick(at: 48, activity: .active)
+    timer.tick(at: 58, activity: .active)
+    #expect(timer.breakKind == .short)
+    #expect(timer.remainingSeconds == 2)
+}
+
+@Test func frequencyAndLengthEditsPreserveProgressAndTheActiveBreak() {
+    var timer = BreakTimer(workDuration: 60, breakDuration: 10, longBreakDuration: 600,
+                           shortBreaksBeforeLongBreak: 3, now: 0)
+    timer.startBreak(at: 0)
+    timer.endBreak(at: 1)
+    timer.tick(at: 20, activity: .active)
+
+    // Lowering the count after the first short break makes the next break long.
+    timer.configure(workDuration: 60, breakDuration: 10, shortBreaksBeforeLongBreak: 1, at: 20)
+    #expect(timer.remainingSeconds == 41)
+    #expect(timer.breakKind == .long)
+    #expect(timer.formattedBreakTime == "10:00")
+    timer.startBreak(at: 20)
+    timer.configure(workDuration: 60, breakDuration: 10, longBreakDuration: 90, at: 21)
+    timer.tick(at: 21, activity: .active)
+    #expect(timer.formattedBreakTime == "09:59")
+    timer.restart(at: 22)
+    #expect(timer.breakKind == .long)
+    #expect(timer.remainingSeconds == 600)
+
+    // Stopping early or sleeping ends exactly one slot, just like natural expiry.
+    timer.endBreak(at: 23)
+    timer.startBreak(at: 24)
+    #expect(timer.breakKind == .short)
+    timer.tick(at: 25, activity: .unavailable)
+    timer.tick(at: 80, activity: .active)
+    timer.startBreak(at: 80)
+    #expect(timer.breakKind == .long)
+    #expect(timer.remainingSeconds == 90)
+}
+
+@Test func timeAwayDuringWorkKeepsTheNextLongBreak() {
+    var timer = BreakTimer(workDuration: 60, breakDuration: 10, longBreakDuration: 300,
+                           shortBreaksBeforeLongBreak: 1, now: 0)
+    timer.startBreak(at: 0)
+    timer.endBreak(at: 10)
+    timer.tick(at: 610, activity: .idle(seconds: 600))
+    timer.tick(at: 620, activity: .unavailable)
+    timer.tick(at: 700, activity: .active)
+    #expect(timer.phase == .working)
+    #expect(timer.remainingSeconds == 60)
+    #expect(timer.breakKind == .long)
+
+    timer.tick(at: 760, activity: .active)
+    #expect(timer.phase == .resting)
+    #expect(timer.breakKind == .long)
+    #expect(timer.remainingSeconds == 300)
+}
