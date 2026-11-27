@@ -2,23 +2,51 @@ import CoreAudio
 
 @MainActor
 final class MicrophoneMonitor {
-    private struct Listener: PropertyListenerDelegate {
-        let onChange: @MainActor @Sendable ([AudioObjectPropertyAddress]) -> Void
+    @MainActor
+    private final class Listener {
+        // The imported functions wrap their block argument in a new block on every call,
+        // so removal would never match. These C function types pass `block` itself.
+        private typealias Block = @convention(block) (UInt32, UnsafePointer<AudioObjectPropertyAddress>) -> Void
+        private typealias Register = @convention(c) (
+            AudioObjectID, UnsafePointer<AudioObjectPropertyAddress>, DispatchQueue?, @escaping Block
+        ) -> OSStatus
+        private static let add: Register = AudioObjectAddPropertyListenerBlock
+        private static let remove: Register = AudioObjectRemovePropertyListenerBlock
 
-        func propertiesChanged(properties: [AudioObjectPropertyAddress]) {
-            MainActor.assumeIsolated { onChange(properties) }
+        private let id: AudioObjectID
+        private let onChange: @MainActor ([AudioObjectPropertyAddress]) -> Void
+        private var registered: [AudioObjectPropertyAddress] = []
+        private lazy var block: Block = { [weak self] count, addresses in
+            let properties = Array(UnsafeBufferPointer(start: addresses, count: Int(count)))
+            MainActor.assumeIsolated { self?.onChange(properties) }
+        }
+
+        init?(_ id: AudioObjectID, properties: [AudioObjectPropertyAddress],
+              onChange: @escaping @MainActor ([AudioObjectPropertyAddress]) -> Void) {
+            self.id = id
+            self.onChange = onChange
+            for var property in properties {
+                guard Self.add(id, &property, .main, block) == noErr else { return nil }
+                registered.append(property)
+            }
+        }
+
+        isolated deinit {
+            for var property in registered {
+                _ = Self.remove(id, &property, .main, block)
+            }
         }
     }
 
     private let onChange: @MainActor @Sendable () -> Void
-    private var system: AudioHardwareObject?
+    private var system: Listener?
     private let systemProperties = [
         PropertyAddress(kAudioHardwarePropertyServiceRestarted),
         PropertyAddress(kAudioHardwarePropertyDevices),
     ]
     private let running = [PropertyAddress(kAudioDevicePropertyDeviceIsRunningSomewhere)]
     private let inputDevices = PropertyAddress(kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeInput)
-    private var observed: [AudioObjectID: AudioHardwareDevice] = [:]
+    private var observed: [AudioObjectID: Listener] = [:]
     private var needsDeviceRefresh = true
 
     init(onChange: @escaping @MainActor @Sendable () -> Void) {
@@ -27,58 +55,27 @@ final class MicrophoneMonitor {
 
     private func observeSystem() {
         // Each service generation gets its own registrations, even when it reuses device IDs.
-        let system = AudioHardwareObject(id: AudioObjectID(kAudioObjectSystemObject))
-        system.delegates = [Listener { [weak self] properties in
+        system = Listener(AudioObjectID(kAudioObjectSystemObject), properties: systemProperties) { [weak self] properties in
             guard let self else { return }
             if properties.contains(where: { $0.mSelector == kAudioHardwarePropertyServiceRestarted }) {
-                removeListeners()
+                system = nil
+                observed.removeAll()
             }
             needsDeviceRefresh = true
             onChange()
-        }]
-        do {
-            try system.addListener(forProperties: systemProperties, dispatchQueue: .main)
-            self.system = system
-        } catch {
-            stopObserving(system, properties: systemProperties)
-        }
-    }
-
-    isolated deinit {
-        removeListeners()
-    }
-
-    private func removeListeners() {
-        if let system { stopObserving(system, properties: systemProperties) }
-        system = nil
-        for device in observed.values { stopObserving(device, properties: running) }
-        observed.removeAll()
-    }
-
-    private func stopObserving(_ object: AudioHardwareObject, properties: [AudioObjectPropertyAddress]) {
-        object.delegates = []
-        // A failed registration or a service reset may leave only some properties registered.
-        for property in properties {
-            try? object.removeListener(forProperties: [property], dispatchQueue: .main)
         }
     }
 
     var isInUse: Bool {
         if system == nil { observeSystem() }
-        if needsDeviceRefresh, let devices = try? AudioHardwareSystem.shared.devices {
+        if system != nil, needsDeviceRefresh, let devices = try? AudioHardwareSystem.shared.devices {
             let ids = Set(devices.map(\.id))
-            for (id, device) in observed where !ids.contains(id) {
-                stopObserving(device, properties: running)
-                observed.removeValue(forKey: id)
-            }
-            for device in devices where observed[device.id] == nil {
-                device.delegates = [Listener { [onChange] _ in onChange() }]
-                if (try? device.addListener(forProperties: running, dispatchQueue: .main)) != nil {
-                    observed[device.id] = device
-                }
+            observed = observed.filter { ids.contains($0.key) }
+            for id in ids where observed[id] == nil {
+                observed[id] = Listener(id, properties: running) { [onChange] _ in onChange() }
             }
             // Retry on the next sample if Core Audio couldn't register a listener.
-            needsDeviceRefresh = system == nil || observed.count != ids.count
+            needsDeviceRefresh = observed.count != ids.count
         }
         let processes = (try? AudioHardwareSystem.shared.processes) ?? []
         return processes.contains(where: usesRunningMicrophone)
