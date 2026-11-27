@@ -250,7 +250,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         let next = Timer(timeInterval: delay, target: self, selector: #selector(tick), userInfo: nil, repeats: false)
-        next.tolerance = 0.02
+        // Give macOS room to coalesce wake-ups. Apple suggests a tolerance of at least 10% of a repeating timer's interval,
+        // and these ticks recur at most 1 s apart. Ticks often fire the full 0.1 s late: the countdown reschedules from the
+        // remaining time, so its lag doesn't build up, but pauses recheck up to 0.1 s further apart.
+        next.tolerance = 0.1
         RunLoop.main.add(next, forMode: .common)
         timer = next
     }
