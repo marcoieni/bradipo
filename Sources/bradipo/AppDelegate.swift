@@ -57,7 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let button = statusItem.button {
             button.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
             button.target = self
-            button.action = #selector(openMenu(_:))
+            button.action = #selector(statusItemClicked(_:))
             button.sendAction(on: [.leftMouseDown, .rightMouseDown])
             button.title = clock.formattedRemainingTime
             if let peek = SlothPeek(button: button) {
@@ -153,7 +153,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for item in [longBreakLength, breakFrequency] { item.isEnabled = clock.longBreaksEnabled }
     }
 
-    @objc private func openMenu(_ button: NSStatusBarButton) {
+    /// A click can't reach the menu bar behind the lock screen or a screen saver, so it clears a dropped unlock or `didstop`.
+    /// A reopen can come from `open -a` while the person is away, so it only opens the menu.
+    @objc private func statusItemClicked(_ button: NSStatusBarButton) {
+        activity.notePersonPresent()
+        openMenu(button)
+    }
+
+    private func openMenu(_ button: NSStatusBarButton) {
         if startupPeek != nil { startCountdown() }
         guard !isOpeningOrTrackingMenu, let window = button.window else { return }
         let frame = button.convert(button.bounds, to: nil)
@@ -220,7 +227,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let reason: String? = switch clock.pauseReason {
         case .manual: "Reminders paused"
         case .meeting: "\(clock.breakKind.title) due · Mic or camera in use"
-        case .idle: "Paused · Mac is idle"
         case .unavailable: "Paused · Mac is away"
         case nil: nil
         }

@@ -2,24 +2,12 @@ import Foundation
 
 public enum ActivityState: Equatable, Sendable {
     case active
-    case idle(seconds: TimeInterval)
     case meeting
     case unavailable
-
-    public static let idleThreshold: TimeInterval = 60
-    public static let restedThreshold: TimeInterval = 5 * 60
-
-    var countsAsRest: Bool {
-        switch self {
-        case .unavailable: true
-        case .idle(let seconds): seconds >= Self.restedThreshold
-        default: false
-        }
-    }
 }
 
 public enum PauseReason: Equatable, Sendable {
-    case manual, idle, meeting, unavailable
+    case manual, meeting, unavailable
 }
 
 public enum BreakPhase: Equatable, Sendable {
@@ -67,14 +55,13 @@ public struct BreakTimer: Sendable {
     }
     public var timeUntilNextDisplayedSecond: TimeInterval { remaining - Double(remainingSeconds - 1) }
     public var timeUntilNextTick: TimeInterval? {
-        // The workspace reports wake and session changes even without a timer.
-        guard activity != .unavailable else { return nil }
-        return switch pauseReason {
+        switch pauseReason {
         // A headset playing output can stay running when its input stops,
         // so a due break needs to recheck even without a device notification.
         case .meeting: 0.25
         case nil: timeUntilNextDisplayedSecond
-        default: 1
+        // Resuming from the menu ticks, and notifications report the end of each away state.
+        case .manual, .unavailable: nil
         }
     }
     public var pauseReason: PauseReason? {
@@ -82,14 +69,13 @@ public struct BreakTimer: Sendable {
         if isManuallyPaused { return .manual }
         return switch activity {
         case .active: nil
-        case .idle(let seconds): seconds >= ActivityState.idleThreshold ? .idle : nil
         case .meeting: remaining == 0 ? .meeting : nil
         case .unavailable: .unavailable
         }
     }
 
     public var canStartBreak: Bool {
-        phase == .working && !isManuallyPaused && activity != .meeting && activity != .unavailable
+        phase == .working && !isManuallyPaused && activity == .active
     }
 
     private var shortBreaksTaken = 0
@@ -98,7 +84,6 @@ public struct BreakTimer: Sendable {
     private var remaining: TimeInterval
     private var lastTick: TimeInterval
     private var activity: ActivityState = .active
-    private var lastMeetingEnd: TimeInterval?
 
     public init(workDuration: TimeInterval, breakDuration: TimeInterval,
                 longBreakDuration: TimeInterval = Self.defaultLongBreakDuration,
@@ -119,18 +104,11 @@ public struct BreakTimer: Sendable {
         let wasPaused = pauseReason != nil
         let elapsed = max(0, now - lastTick)
         lastTick = max(lastTick, now)
-        if activity == .meeting && newActivity != .meeting { lastMeetingEnd = lastTick }
-        // Keyboard and pointer idle time can span an entire call. Only time away
-        // after the call can pause the countdown or count as a rest.
-        if case .idle(let seconds) = newActivity, let lastMeetingEnd {
-            activity = .idle(seconds: min(seconds, lastTick - lastMeetingEnd))
-        } else {
-            activity = newActivity
-        }
+        activity = newActivity
 
         switch phase {
         case .working:
-            if activity.countsAsRest {
+            if activity == .unavailable {
                 remaining = workDuration
             } else if pauseReason == nil {
                 if !wasPaused { remaining = max(0, remaining - elapsed) }
@@ -163,7 +141,6 @@ public struct BreakTimer: Sendable {
     }
 
     public mutating func startBreak(at now: TimeInterval) {
-        // Assistive input can activate the menu without resetting macOS's idle clock.
         guard canStartBreak else { return }
         let kind = breakKind
         let duration = nextBreakDuration

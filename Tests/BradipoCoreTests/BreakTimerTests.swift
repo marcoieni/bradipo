@@ -33,11 +33,10 @@ import Testing
     #expect(timer.phase == .working)
     #expect(timer.remainingSeconds == 0)
 
-    // macOS can report an hour without keyboard input on the first sample after a call.
-    timer.tick(at: 3620.25, activity: .idle(seconds: 3600))
+    timer.tick(at: 3620.25, activity: .active)
     #expect(timer.phase == .resting)
     #expect(timer.remainingSeconds == 5)
-    timer.tick(at: 3625.25, activity: .idle(seconds: 3605))
+    timer.tick(at: 3625.25, activity: .active)
     #expect(timer.phase == .working)
     #expect(timer.remainingSeconds == 20)
 }
@@ -60,22 +59,6 @@ import Testing
     #expect(timer.phase == .resting)
 }
 
-@Test func postMeetingIdleStartsWhenTheDevicesAreReleased() {
-    var timer = BreakTimer(workDuration: 600, breakDuration: 5, now: 0)
-    timer.tick(at: 1, activity: .meeting)
-    timer.tick(at: 400, activity: .idle(seconds: 400))
-    #expect(timer.pauseReason == nil)
-    #expect(timer.remainingSeconds == 200)
-
-    timer.tick(at: 459, activity: .idle(seconds: 459))
-    #expect(timer.remainingSeconds == 141)
-    timer.tick(at: 460, activity: .idle(seconds: 460))
-    #expect(timer.pauseReason == .idle)
-    #expect(timer.remainingSeconds == 141)
-    timer.tick(at: 700, activity: .idle(seconds: 700))
-    #expect(timer.remainingSeconds == 600)
-}
-
 @Test func manualPauseHoldsAnOverdueBreakAndSleepClearsIt() {
     var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
     timer.tick(at: 25, activity: .meeting)
@@ -93,42 +76,13 @@ import Testing
     #expect(timer.remainingSeconds == 20)
 }
 
-@Test func shortIdlePausesAndLongIdleCountsAsRest() {
-    var timer = BreakTimer(workDuration: 120, breakDuration: 20, now: 0)
-    timer.tick(at: 55, activity: .active)
-    timer.tick(at: 60, activity: .idle(seconds: 60))
-    #expect(timer.pauseReason == .idle)
-    timer.tick(at: 90, activity: .active)
-    #expect(timer.remainingSeconds == 65)
-
-    timer.tick(at: 140, activity: .active)
-    timer.tick(at: 200, activity: .idle(seconds: 60))
-    timer.tick(at: 440, activity: .idle(seconds: 300))
-    timer.tick(at: 441, activity: .active)
-    #expect(timer.phase == .working)
-    #expect(timer.pauseReason == nil)
-    #expect(timer.remainingSeconds == 120)
-}
-
-@Test func anExplicitBreakRequestWorksWithAssistiveInputWhileIdle() {
-    var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
-    timer.tick(at: 80, activity: .idle(seconds: 80))
-    #expect(timer.phase == .working)
-    timer.startBreak(at: 80)
-    #expect(timer.phase == .resting)
-    timer.tick(at: 85, activity: .idle(seconds: 85))
-    #expect(timer.pauseReason == .idle)
-}
-
-@Test func elapsedTimeAndInputDuringARest() {
+@Test func elapsedTimeAndThePauseActionDuringARest() {
     var timer = BreakTimer(workDuration: 120, breakDuration: 90, now: 100)
     timer.tick(at: 111.6, activity: .active)
     #expect(timer.remainingSeconds == 109)
     timer.startBreak(at: 112)
 
-    // The existing rest continues when the person looks away, moves the mouse,
-    // or the menu's pause action is invoked during a break.
-    timer.tick(at: 172, activity: .idle(seconds: 60))
+    // The menu's pause action is ignored during a break, so the rest still ends on schedule.
     timer.setManuallyPaused(true, at: 173)
     timer.tick(at: 201, activity: .active)
     #expect(timer.phase == .resting)
@@ -179,7 +133,8 @@ func unavailableMacWaitsForWakeBeforeSchedulingMoreTicks(manuallyPaused: Bool) {
     // took precedence over the away message in the menu.
     timer.tick(at: 3608, activity: .active)
     #expect(timer.remainingSeconds == 20)
-    #expect(timer.timeUntilNextTick == 1)
+    // Only the countdown needs a timer. Resuming from the menu ticks on its own.
+    #expect(timer.timeUntilNextTick == (manuallyPaused ? nil : 1))
     timer.tick(at: 3609, activity: .active)
     #expect(timer.remainingSeconds == (manuallyPaused ? 20 : 19))
 }
@@ -344,8 +299,11 @@ func unavailableMacWaitsForWakeBeforeSchedulingMoreTicks(manuallyPaused: Bool) {
                            shortBreaksBeforeLongBreak: 1, now: 0)
     timer.startBreak(at: 0)
     timer.endBreak(at: 10)
-    timer.tick(at: 610, activity: .idle(seconds: 600))
-    timer.tick(at: 620, activity: .unavailable)
+    timer.tick(at: 30, activity: .active)
+    #expect(timer.remainingSeconds == 40)
+
+    // Sleeping from 30 s until 700 s restarts the work interval but not the cycle.
+    timer.tick(at: 30, activity: .unavailable)
     timer.tick(at: 700, activity: .active)
     #expect(timer.phase == .working)
     #expect(timer.remainingSeconds == 60)
