@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var isOpeningOrTrackingMenu = false
     private let pauseStatus = NSMenuItem()
     private let takeBreak = NSMenuItem()
+    private let takeLongBreak = NSMenuItem(title: "Take a Long Break", action: #selector(startBreak), keyEquivalent: "")
     private let pause = NSMenuItem()
     private let durations: [(menu: NSMenu, key: String, presets: [Int])] = [
         (NSMenu(title: "Work interval"), "workSeconds", [5, 10, 20, 30, 45, 60].map { $0 * 60 }),
@@ -126,6 +127,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(pause)
         takeBreak.target = self
         menu.addItem(takeBreak)
+        takeLongBreak.target = self
+        takeLongBreak.subtitle = "Starts a new cycle"
+        menu.addItem(takeLongBreak)
         menu.addItem(withTitle: "Restart Timer", action: #selector(restartTimer), keyEquivalent: "").target = self
         menu.addItem(.separator())
         for setting in durations {
@@ -279,6 +283,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         takeBreak.subtitle = breakActionSubtitle
         takeBreak.action = resting ? #selector(endBreak) : #selector(startBreak)
         takeBreak.isEnabled = resting || clock.canStartBreak
+        // While a long break is next, the break action already offers it.
+        takeLongBreak.isHidden = resting || !clock.longBreaksEnabled || clock.breakKind == .long
+        takeLongBreak.isEnabled = clock.canStartBreak
         pause.isEnabled = !resting
         pause.title = paused ? "Resume Reminders" : "Pause Reminders"
         if resting {
@@ -318,9 +325,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         "\(count) short \(count == 1 ? "break" : "breaks")"
     }
 
-    @objc private func startBreak() {
+    @objc private func startBreak(_ sender: NSMenuItem) {
         clock.tick(at: now, activity: activity.sample(detectMeetings: deferBreaksDuringMeetings))
-        clock.startBreak(at: now)
+        clock.startBreak(sender === takeLongBreak ? .long : nil, at: now)
         render()
     }
 
