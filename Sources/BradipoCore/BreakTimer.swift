@@ -18,6 +18,14 @@ public enum BreakKind: Sendable {
     case short, long
 }
 
+/// A change that `BreakTimer.tick` makes as time passes, rather than one the caller asks for.
+public enum BreakTransition: Equatable, Sendable {
+    /// A break came due and began, possibly after a meeting deferred it.
+    case started
+    /// A break ran its full length. Time away also ends a break, but that isn't a finish.
+    case finished
+}
+
 public struct BreakTimer: Sendable {
     public static let defaultLongBreakDuration: TimeInterval = 5 * 60
     public static let defaultShortBreaksBeforeLongBreak = 3
@@ -100,7 +108,8 @@ public struct BreakTimer: Sendable {
     }
 
     /// Supply monotonic timestamps and sample the environment before deciding a break is due.
-    public mutating func tick(at now: TimeInterval, activity newActivity: ActivityState) {
+    @discardableResult
+    public mutating func tick(at now: TimeInterval, activity newActivity: ActivityState) -> BreakTransition? {
         let wasPaused = pauseReason != nil
         let elapsed = max(0, now - lastTick)
         lastTick = max(lastTick, now)
@@ -114,11 +123,12 @@ public struct BreakTimer: Sendable {
                 if !wasPaused { remaining = max(0, remaining - elapsed) }
                 if remaining == 0 { startBreak(at: now) }
             }
+            return phase == .resting ? .started : nil
         case .resting:
             remaining -= elapsed
-            if remaining <= 0 || activity == .unavailable {
-                endBreak(at: now)
-            }
+            guard remaining <= 0 || activity == .unavailable else { return nil }
+            endBreak(at: now)
+            return activity == .unavailable ? nil : .finished
         }
     }
 

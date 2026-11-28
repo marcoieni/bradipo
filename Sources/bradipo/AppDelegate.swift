@@ -22,6 +22,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                         keyEquivalent: "")
     private let resetBanners = NSMenuItem(title: "Reset Banner Size and Position", action: #selector(BreakOverlay.resetBanners),
                                           keyEquivalent: "")
+    /// Both are off until checked. They mark only the changes `BreakTimer.tick` reports, so starting or stopping
+    /// a break from the menu or banner, or time away ending one, plays nothing.
+    private let breakSounds: [(transition: BreakTransition, key: String, sound: NSSound.Name, item: NSMenuItem)] = [
+        (.started, "breakStartSoundEnabled", "Purr",
+         NSMenuItem(title: "Play Sound When Breaks Start", action: #selector(toggleBreakSound), keyEquivalent: "")),
+        (.finished, "breakEndSoundEnabled", "Glass",
+         NSMenuItem(title: "Play Sound When Breaks End", action: #selector(toggleBreakSound), keyEquivalent: "")),
+    ]
     private let meetingItem = NSMenuItem()
     private let login = LoginItem()
     private let updater = Updater()
@@ -136,6 +144,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(showBanner)
         resetBanners.target = overlay
         menu.addItem(resetBanners)
+        for setting in breakSounds {
+            setting.item.target = self
+            menu.addItem(setting.item)
+        }
         menu.addItem(.separator())
         meetingItem.title = "Defer Breaks During Meetings"
         meetingItem.target = self
@@ -155,6 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         resetBanners.isEnabled = overlay.canResetBanners(timer: clock)
         meetingItem.state = deferBreaksDuringMeetings ? .on : .off
         login.refresh()
+        for setting in breakSounds { setting.item.state = defaults.bool(forKey: setting.key) ? .on : .off }
         longBreaks.state = clock.longBreaksEnabled ? .on : .off
         for setting in durations {
             updateDurationMenu(setting.menu, seconds: Int(defaults.duration(forKey: setting.key)))
@@ -227,8 +240,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func tick() {
         let state = activity.sample(detectMeetings: deferBreaksDuringMeetings)
-        clock.tick(at: now, activity: state)
+        let transition = clock.tick(at: now, activity: state)
         render()
+        if let setting = breakSounds.first(where: { $0.transition == transition }), defaults.bool(forKey: setting.key) {
+            NSSound(named: setting.sound)?.play()
+        }
     }
 
     private func render() {
@@ -326,6 +342,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleLongBreaks() {
         defaults.set(!clock.longBreaksEnabled, forKey: "longBreaksEnabled")
         applySchedule()
+    }
+
+    @objc private func toggleBreakSound(_ sender: NSMenuItem) {
+        guard let setting = breakSounds.first(where: { $0.item === sender }) else { return }
+        defaults.set(!defaults.bool(forKey: setting.key), forKey: setting.key)
     }
 
     @objc private func chooseAccentColor() {
