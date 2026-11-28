@@ -6,7 +6,7 @@ bradipo is a menu-bar break reminder for macOS. A monospaced countdown keeps its
 
 At launch, the sloth peeks up from the menu bar for 1.5 seconds before your first work interval starts. With Reduce Motion enabled, the countdown appears immediately.
 
-Click the countdown to pause reminders, start the next short or long break early, or restart the timer. While reminders are paused, the countdown dims behind a pause symbol. The break action shows how many short breaks remain before the next long break. Under **Work interval**, **Short break length**, or **Long break length**, choose a preset or select **Custom…** to enter minutes and seconds. Choose **Long break after 3 short breaks…** to change how many short breaks come before each long one. Uncheck **Long Breaks** to take only short breaks; a long break already running still finishes. While it's off, the long-break settings are greyed out and the break action doesn't show the remaining count. Checking it again starts a new cycle. The banner identifies which kind of break is running. Ending a break early still counts it toward the cycle. Time away keeps your place in the cycle. Relaunching bradipo starts a new cycle with your saved settings.
+Click the countdown to pause reminders, start the next short or long break early, or restart the timer. While reminders are paused, the countdown dims behind a pause symbol. The break action shows how many short breaks remain before the next long break. Under **Work interval**, **Short break length**, or **Long break length**, choose a preset or select **Custom…** to enter minutes and seconds. Choose **Long break after 3 short breaks…** to change how many short breaks come before each long one. Short breaks you've already taken still count, so lowering it can make the next break long. Uncheck **Long Breaks** to take only short breaks; a long break already running still finishes. While it's off, the long-break settings are greyed out and the break action doesn't show the remaining count. Checking it again starts a new cycle. The banner identifies which kind of break is running. Ending a break early still counts it toward the cycle. Time away keeps your place in the cycle. Relaunching bradipo starts a new cycle with your saved settings and resumes paused reminders.
 
 Choose **Accent Color…** to change the glow and banner, or use **Restore Default Green** in the color picker to bring back the original colors. Choose **Border Glow Intensity…** and drag the slider to preview the glow on every display. At 0% the border disappears. Above 50% it spreads farther into the screen. Click **Done** to close the preview. Bradipo remembers your setting for future breaks. Uncheck **Show Break Banner** to use just the border glow during breaks. The change takes effect immediately and is remembered after relaunch. Choose **Reset Banner Size and Position** to restore the original size and bottom-center position on every display. During a break, **Restart Timer** resets the break to its full length. **Stop short break** or **Stop long break** ends it early and starts a fresh work interval. Choose **Launch at Login** to have macOS open bradipo when you sign in. **About bradipo** shows the installed version and links to the GitHub commit used to build it. **Check for Updates…** offers to install the latest release from GitHub and relaunch bradipo; bradipo never checks on its own.
 
@@ -14,9 +14,48 @@ Choose **Accent Color…** to change the glow and banner, or use **Restore Defau
 
 ### Meetings and time away
 
-- **Defer Breaks During Meetings** is on by default. The countdown keeps running during calls and dictation. If a break comes due while another app uses the microphone or camera, the timer holds at zero. The full break starts as soon as both devices are free. If either device turns on during a break, the reminder stays visible and the break finishes on schedule. Detection uses Core Audio and AVFoundation, so a call with both devices off can go undetected. You can turn this setting off in the menu.
+- **Defer Breaks During Meetings** is on by default. The countdown keeps running during calls and dictation. If a break comes due while another app uses the microphone or camera, the timer holds at zero. The full break starts as soon as both devices are free. While either device is in use, you can't start a break early. If either device turns on during a break, the reminder stays visible and the break finishes on schedule. Detection uses Core Audio and AVFoundation, so a call with both devices off can go undetected. You can turn this setting off in the menu. Turning it off starts a break held at zero right away.
 - The countdown keeps running when you aren't typing or moving the pointer, for example while you read or watch a video.
-- Locking the screen, putting the Mac or its display to sleep, or switching user sessions starts a fresh interval when you return, as does the screen saver, which macOS can start while you read.
+- Locking the screen, putting the Mac or its displays to sleep, switching user sessions, and the screen saver all reset the countdown to a full work interval. macOS can start the screen saver while you read. The countdown starts when you return, unless you paused reminders. If it doesn't start after you unlock the screen or the screen saver ends, click it.
+
+### How the timer works
+
+This diagram shows the states bradipo can be in and what moves it from one to the next.
+
+```mermaid
+stateDiagram-v2
+    state "Sloth peek" as Peek
+    state "Work interval" as Working
+    state "Break due, held at zero" as Held
+    state "Short or long break" as Break
+    state "Reminders paused" as Paused
+
+    [*] --> Peek: Launch
+    [*] --> Working: Launch with Reduce Motion on
+    Peek --> Working: Peek ends, or click the sloth
+
+    Working --> Break: Countdown reaches zero, or Take a Short/Long Break
+    Working --> Held: Reaches zero while the mic or camera is in use, with meeting deferral on
+    Held --> Break: Mic and camera are free, or meeting deferral turned off
+    Held --> Working: Restart Timer
+    Break --> Working: Break ends, click the banner center, or Stop short/long break
+
+    Working --> Paused: Pause Reminders
+    Held --> Paused: Pause Reminders
+    Paused --> Working: Resume Reminders or Restart Timer
+    Paused --> Held: Resume Reminders with a break due
+    Paused --> Paused: Go away, which resets the countdown
+
+    Working --> Away: Go away
+    Held --> Away: Go away
+    Break --> Away: Go away, which ends the break
+    Away --> Working: Return, with a fresh interval
+```
+
+- **Away** is any of the time-away cases in [Meetings and time away](#meetings-and-time-away).
+- **Pause Reminders** is greyed out during a break.
+- Outside a break, **Restart Timer** starts a fresh work interval and resumes paused reminders. It drops a break held at zero, so the countdown runs even while the mic or camera is in use.
+- Changing **Work interval** resets the countdown to the new length and keeps paused reminders paused. During a break, the new length applies once the break ends. A new break length applies from the next break.
 
 ### Install
 
