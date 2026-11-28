@@ -246,19 +246,20 @@ func unavailableMacWaitsForWakeBeforeSchedulingMoreTicks(manuallyPaused: Bool) {
 }
 
 @Test func aLongBreakTakenWhileAShortOneIsNextRunsForTheLongLength() {
-    var timer = BreakTimer(workDuration: 60, breakDuration: 10, longBreakDuration: 300,
+    // 90 s rather than the 300 s default, so a break that ignored the setting would fail.
+    var timer = BreakTimer(workDuration: 60, breakDuration: 10, longBreakDuration: 90,
                            shortBreaksBeforeLongBreak: 2, now: 0)
     #expect(timer.breakKind == .short)
     timer.startLongBreak(at: 5)
     #expect(timer.phase == .resting)
     #expect(timer.breakKind == .long)
-    #expect(timer.remainingSeconds == 300)
+    #expect(timer.remainingSeconds == 90)
 
-    // A short break would have ended at 15 s. This one ends 300 s after it started.
-    timer.tick(at: 304, activity: .active)
+    // A short break would have ended at 15 s. This one ends 90 s after it started.
+    timer.tick(at: 94, activity: .active)
     #expect(timer.phase == .resting)
     #expect(timer.remainingSeconds == 1)
-    #expect(timer.tick(at: 305, activity: .active) == .finished)
+    #expect(timer.tick(at: 95, activity: .active) == .finished)
     #expect(timer.phase == .working)
     #expect(timer.remainingSeconds == 60)
 }
