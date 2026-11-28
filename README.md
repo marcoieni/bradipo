@@ -15,8 +15,8 @@ Choose **Accent Color…** to change the glow and banner, or use **Restore Defau
 ### Meetings and time away
 
 - **Defer Breaks During Meetings** is on by default. The countdown keeps running during calls and dictation. If a break comes due while another app uses the microphone or camera, the timer holds at zero. The full break starts as soon as both devices are free. If either device turns on during a break, the reminder stays visible and the break finishes on schedule. Detection uses Core Audio and AVFoundation, so a call with both devices off can go undetected. You can turn this setting off in the menu.
-- After one minute without keyboard or pointer input, bradipo pauses. After five minutes away, you return to a fresh work interval. Time spent in a detected meeting counts as work.
-- Putting the Mac or its display to sleep, or switching user sessions, also starts a fresh interval when you return.
+- The countdown keeps running when you aren't typing or moving the pointer, for example while you read or watch a video.
+- Locking the screen, putting the Mac or its display to sleep, or switching user sessions starts a fresh interval when you return, as does the screen saver, which macOS can start while you read.
 
 ### Install
 
