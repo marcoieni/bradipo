@@ -86,6 +86,14 @@ public struct BreakTimer: Sendable {
         phase == .working && !isManuallyPaused && activity == .active
     }
 
+    /// Whether a tick at `now` would start a break unless a meeting holds it, so the activity sampled for that tick
+    /// decides the break. A break that a meeting holds stays due.
+    public func isBreakDue(at now: TimeInterval) -> Bool {
+        // A trial tick on a copy can't drift from what `tick` does.
+        var trial = self
+        return trial.tick(at: now, activity: .active) == .started
+    }
+
     private var shortBreaksTaken = 0
     private var activeBreak: (kind: BreakKind, duration: TimeInterval)?
     private func length(of kind: BreakKind) -> TimeInterval { kind == .long ? longBreakDuration : breakDuration }
