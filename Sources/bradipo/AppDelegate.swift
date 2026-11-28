@@ -23,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                         keyEquivalent: "")
     private let resetBanners = NSMenuItem(title: "Reset Banner Size and Position", action: #selector(BreakOverlay.resetBanners),
                                           keyEquivalent: "")
+    private let showInScreenSharing = NSMenuItem(title: "Show Breaks in Screen Sharing",
+                                                 action: #selector(BreakOverlay.toggleScreenSharing), keyEquivalent: "")
     /// Both are off until checked. They mark only the changes `BreakTimer.tick` reports, so starting or stopping
     /// a break from the menu or banner, or time away ending one, plays nothing.
     private let breakSounds: [(transition: BreakTransition, key: String, sound: NSSound.Name, item: NSMenuItem)] = [
@@ -148,6 +150,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(showBanner)
         resetBanners.target = overlay
         menu.addItem(resetBanners)
+        showInScreenSharing.target = overlay
+        menu.addItem(showInScreenSharing)
         for setting in breakSounds {
             setting.item.target = self
             menu.addItem(setting.item)
@@ -169,6 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         showBanner.state = overlay.showsBanner ? .on : .off
         resetBanners.isEnabled = overlay.canResetBanners(timer: clock)
+        showInScreenSharing.state = overlay.showsInScreenSharing ? .on : .off
         meetingItem.state = deferBreaksDuringMeetings ? .on : .off
         login.refresh()
         for setting in breakSounds { setting.item.state = defaults.bool(forKey: setting.key) ? .on : .off }
