@@ -327,7 +327,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func startBreak(_ sender: NSMenuItem) {
         clock.tick(at: now, activity: activity.sample(detectMeetings: deferBreaksDuringMeetings))
-        clock.startBreak(sender === takeLongBreak ? .long : nil, at: now)
+        if sender === takeLongBreak {
+            clock.startLongBreak(at: now)
+        } else {
+            clock.startBreak(at: now)
+        }
         render()
     }
 

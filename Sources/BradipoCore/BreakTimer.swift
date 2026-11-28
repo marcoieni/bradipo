@@ -150,10 +150,19 @@ public struct BreakTimer: Sendable {
         lastTick = now
     }
 
-    /// Starts `kind`, or the next scheduled break if it's nil. Any long break starts a new cycle.
-    public mutating func startBreak(_ kind: BreakKind? = nil, at now: TimeInterval) {
+    public mutating func startBreak(at now: TimeInterval) {
+        start(breakKind, at: now)
+    }
+
+    /// Starts a long break even while a short one is next, which starts a new cycle.
+    /// Does nothing while long breaks are off.
+    public mutating func startLongBreak(at now: TimeInterval) {
+        guard longBreaksEnabled else { return }
+        start(.long, at: now)
+    }
+
+    private mutating func start(_ kind: BreakKind, at now: TimeInterval) {
         guard canStartBreak else { return }
-        let kind = kind ?? breakKind
         let duration = length(of: kind)
         activeBreak = (kind, duration)
         shortBreaksTaken = kind == .short && longBreaksEnabled ? shortBreaksTaken + 1 : 0
