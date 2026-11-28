@@ -245,6 +245,82 @@ func unavailableMacWaitsForWakeBeforeSchedulingMoreTicks(manuallyPaused: Bool) {
     #expect(timer.remainingSeconds == 2)
 }
 
+@Test func aLongBreakTakenWhileAShortOneIsNextRunsForTheLongLength() {
+    // 90 s rather than the 300 s default, so a break that ignored the setting would fail.
+    var timer = BreakTimer(workDuration: 60, breakDuration: 10, longBreakDuration: 90,
+                           shortBreaksBeforeLongBreak: 2, now: 0)
+    #expect(timer.breakKind == .short)
+    timer.startLongBreak(at: 5)
+    #expect(timer.phase == .resting)
+    #expect(timer.breakKind == .long)
+    #expect(timer.remainingSeconds == 90)
+
+    // A short break would have ended at 15 s. This one ends 90 s after it started.
+    timer.tick(at: 94, activity: .active)
+    #expect(timer.phase == .resting)
+    #expect(timer.remainingSeconds == 1)
+    #expect(timer.tick(at: 95, activity: .active) == .finished)
+    #expect(timer.phase == .working)
+    #expect(timer.remainingSeconds == 60)
+}
+
+@Test func aLongBreakTakenWhileAShortOneIsNextStartsANewCycle() {
+    var timer = BreakTimer(workDuration: 60, breakDuration: 10, longBreakDuration: 300,
+                           shortBreaksBeforeLongBreak: 2, now: 0)
+    timer.startBreak(at: 0)
+    timer.endBreak(at: 1)
+    #expect(timer.shortBreaksRemaining == 1)
+
+    // The short break taken before it no longer counts, so both short breaks come before the next long one.
+    timer.startLongBreak(at: 2)
+    #expect(timer.shortBreaksRemaining == 2)
+    timer.endBreak(at: 3)
+    #expect(timer.breakKind == .short)
+    timer.startBreak(at: 4)
+    timer.endBreak(at: 5)
+    #expect(timer.breakKind == .short)
+    timer.startBreak(at: 6)
+    timer.endBreak(at: 7)
+    #expect(timer.breakKind == .long)
+}
+
+@Test func aLongBreakCannotStartWhileRemindersArePaused() {
+    var timer = BreakTimer(workDuration: 60, breakDuration: 10, longBreakDuration: 300,
+                           shortBreaksBeforeLongBreak: 3, now: 0)
+    timer.startBreak(at: 0)
+    timer.endBreak(at: 1)
+    timer.setManuallyPaused(true, at: 2)
+    timer.startLongBreak(at: 3)
+    #expect(timer.phase == .working)
+    // The ignored request leaves the cycle alone, so the short break already taken still counts.
+    #expect(timer.shortBreaksRemaining == 2)
+}
+
+@Test func aLongBreakCannotStartDuringAShortBreak() {
+    var timer = BreakTimer(workDuration: 60, breakDuration: 10, longBreakDuration: 300,
+                           shortBreaksBeforeLongBreak: 3, now: 0)
+    timer.startBreak(at: 4)
+    timer.startLongBreak(at: 5)
+    // The short break isn't lengthened, and it still counts toward the cycle rather than starting a new one.
+    #expect(timer.breakKind == .short)
+    #expect(timer.remainingSeconds == 10)
+    #expect(timer.shortBreaksRemaining == 2)
+
+    // The request doesn't restart the short break either: that would move its end from 14 s to 15 s.
+    #expect(timer.tick(at: 14, activity: .active) == .finished)
+}
+
+@Test func aLongBreakCannotStartWhileLongBreaksAreOff() {
+    var timer = BreakTimer(workDuration: 60, breakDuration: 10, longBreakDuration: 300,
+                           shortBreaksBeforeLongBreak: 2, longBreaksEnabled: false, now: 0)
+    timer.tick(at: 20, activity: .active)
+    // While long breaks are off every break is short, so the request is ignored.
+    timer.startLongBreak(at: 20)
+    #expect(timer.phase == .working)
+    // The 20 s already worked still count, so the work interval doesn't start over.
+    #expect(timer.remainingSeconds == 40)
+}
+
 @Test func editingTheFrequencyRecountsTheShortBreaksStillToCome() {
     var timer = BreakTimer(workDuration: 60, breakDuration: 10, shortBreaksBeforeLongBreak: 3, now: 0)
     timer.startBreak(at: 1)

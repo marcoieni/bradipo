@@ -53,7 +53,7 @@ public struct BreakTimer: Sendable {
     /// Also supplies the natural banner width between breaks.
     public var formattedBreakTime: String {
         if activeBreak != nil { return formattedRemainingTime }
-        let duration = nextBreakDuration
+        let duration = length(of: breakKind)
         return Self.formatted(seconds: Int(ceil(duration)), duration: duration)
     }
 
@@ -88,7 +88,7 @@ public struct BreakTimer: Sendable {
 
     private var shortBreaksTaken = 0
     private var activeBreak: (kind: BreakKind, duration: TimeInterval)?
-    private var nextBreakDuration: TimeInterval { breakKind == .long ? longBreakDuration : breakDuration }
+    private func length(of kind: BreakKind) -> TimeInterval { kind == .long ? longBreakDuration : breakDuration }
     private var remaining: TimeInterval
     private var lastTick: TimeInterval
     private var activity: ActivityState = .active
@@ -151,9 +151,19 @@ public struct BreakTimer: Sendable {
     }
 
     public mutating func startBreak(at now: TimeInterval) {
+        start(breakKind, at: now)
+    }
+
+    /// Starts a long break even while a short one is next, which starts a new cycle.
+    /// Does nothing while long breaks are off.
+    public mutating func startLongBreak(at now: TimeInterval) {
+        guard longBreaksEnabled else { return }
+        start(.long, at: now)
+    }
+
+    private mutating func start(_ kind: BreakKind, at now: TimeInterval) {
         guard canStartBreak else { return }
-        let kind = breakKind
-        let duration = nextBreakDuration
+        let duration = length(of: kind)
         activeBreak = (kind, duration)
         shortBreaksTaken = kind == .short && longBreaksEnabled ? shortBreaksTaken + 1 : 0
         remaining = duration
