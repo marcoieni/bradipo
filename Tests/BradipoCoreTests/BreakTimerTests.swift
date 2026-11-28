@@ -23,20 +23,20 @@ import Testing
 @Test func meetingAtDeadlineDefersOneFullBreakUntilRelease() {
     var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
     timer.tick(at: 19, activity: .active)
-    timer.tick(at: 20, activity: .meeting)
+    #expect(timer.tick(at: 20, activity: .meeting) == nil)
     timer.startBreak(at: 20)
     #expect(timer.phase == .working)
     #expect(timer.pauseReason == .meeting)
     #expect(timer.remainingSeconds == 0)
 
-    timer.tick(at: 3620, activity: .meeting)
+    #expect(timer.tick(at: 3620, activity: .meeting) == nil)
     #expect(timer.phase == .working)
     #expect(timer.remainingSeconds == 0)
 
-    timer.tick(at: 3620.25, activity: .active)
+    #expect(timer.tick(at: 3620.25, activity: .active) == .started)
     #expect(timer.phase == .resting)
     #expect(timer.remainingSeconds == 5)
-    timer.tick(at: 3625.25, activity: .active)
+    #expect(timer.tick(at: 3625.25, activity: .active) == .finished)
     #expect(timer.phase == .working)
     #expect(timer.remainingSeconds == 20)
 }
@@ -104,7 +104,7 @@ func meetingDuringBreakPreservesItsDeadline(activityAtEnd: ActivityState) {
     timer.tick(at: 79, activity: activityAtEnd)
     #expect(timer.phase == .resting)
     #expect(timer.remainingSeconds == 1)
-    timer.tick(at: 80, activity: activityAtEnd)
+    #expect(timer.tick(at: 80, activity: activityAtEnd) == .finished)
     #expect(timer.phase == .working)
     #expect(timer.remainingSeconds == 60)
     timer.tick(at: 81, activity: activityAtEnd)
@@ -400,4 +400,36 @@ func unavailableMacWaitsForWakeBeforeSchedulingMoreTicks(manuallyPaused: Bool) {
     timer.tick(at: 315, activity: .active)
     #expect(timer.phase == .working)
     #expect(timer.breakKind == .short)
+}
+
+@Test func tickReportsEachBreakStartingAndRunningItsFullLength() {
+    var timer = BreakTimer(workDuration: 10, breakDuration: 2, longBreakDuration: 5,
+                           shortBreaksBeforeLongBreak: 1, now: 0)
+    var reported: [Int: BreakTransition] = [:]
+    for second in 1...27 {
+        reported[second] = timer.tick(at: Double(second), activity: .active)
+        if second == 22 { #expect(timer.breakKind == .long) }
+    }
+    #expect(reported == [10: .started, 12: .finished, 22: .started, 27: .finished])
+
+    // A tick long overdue, say after the Mac was busy, starts the full break but doesn't also finish it.
+    #expect(timer.tick(at: 100, activity: .active) == .started)
+    #expect(timer.remainingSeconds == 2)
+    #expect(timer.tick(at: 102, activity: .active) == .finished)
+}
+
+@Test func stoppingRestartingOrSteppingAwayDuringABreakIsNotAFinish() {
+    var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
+    timer.startBreak(at: 0)
+    timer.restart(at: 3)
+    #expect(timer.tick(at: 5, activity: .active) == nil)
+    timer.endBreak(at: 6)
+    #expect(timer.tick(at: 8, activity: .active) == nil)
+
+    // Time away ends the break without a finish, even once its full length has passed.
+    #expect(timer.tick(at: 26, activity: .active) == .started)
+    #expect(timer.tick(at: 40, activity: .unavailable) == nil)
+    #expect(timer.phase == .working)
+    #expect(timer.tick(at: 100, activity: .active) == nil)
+    #expect(timer.remainingSeconds == 20)
 }
