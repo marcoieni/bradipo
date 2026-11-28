@@ -1,6 +1,7 @@
 import AppKit
 import BradipoCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -34,6 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
          NSMenuItem(title: "Play Sound When Breaks End", action: #selector(toggleBreakSound), keyEquivalent: "")),
     ]
     private let meetingItem = NSMenuItem()
+    private let ignoredAppsItem = NSMenuItem(title: "Ignored Apps", action: nil, keyEquivalent: "")
+    private let ignoredAppsMenu = NSMenu(title: "Ignored Apps")
     private let login = LoginItem()
     private let updater = Updater()
     private lazy var aboutPanel = AboutPanel()
@@ -50,6 +53,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let defaults = UserDefaults.standard
     @AppStorage(BreakAccent.defaultsKey) private var accent = BreakAccent.green
     private var deferBreaksDuringMeetings: Bool { defaults.bool(forKey: "pauseDuringMeetings") }
+    /// Names by identifier, so the menu can list ignored apps that aren't running.
+    private var ignoredApps: [String: String] {
+        get { defaults.dictionary(forKey: "ignoredMeetingApps")?.compactMapValues { $0 as? String } ?? [:] }
+        set {
+            defaults.set(newValue, forKey: "ignoredMeetingApps")
+            activity.ignoredMicrophoneApps = Set(newValue.keys)
+        }
+    }
     private var clock: BreakTimer
     private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
@@ -65,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                            longBreaksEnabled: defaults.bool(forKey: "longBreaksEnabled"),
                            now: ProcessInfo.processInfo.systemUptime)
         super.init()
+        activity.ignoredMicrophoneApps = Set(ignoredApps.keys)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -104,7 +116,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         timer?.invalidate()
         startupPeek?.stop()
         startupPeek = nil
-        let state = activity.sample(detectMeetings: deferBreaksDuringMeetings)
+        // The tick follows a restart, so it can't start a break.
+        let state = activity.sample(detectMeetings: deferBreaksDuringMeetings, fresh: false)
         let start = now
         clock.restart(at: start)
         clock.tick(at: start, activity: state)
@@ -161,6 +174,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         meetingItem.target = self
         meetingItem.action = #selector(toggleMeetingDeferral)
         menu.addItem(meetingItem)
+        ignoredAppsMenu.delegate = self
+        ignoredAppsMenu.autoenablesItems = false
+        ignoredAppsItem.submenu = ignoredAppsMenu
+        menu.addItem(ignoredAppsItem)
         menu.addItem(login.menuItem)
         menu.addItem(.separator())
         menu.addItem(withTitle: "About bradipo", action: #selector(showAbout), keyEquivalent: "").target = self
@@ -171,10 +188,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === ignoredAppsMenu { return updateIgnoredAppsMenu() }
+        // Between break decisions the meeting check can reuse a recent result, which could leave a break action enabled
+        // during a meeting that just started.
+        update(fresh: true)
         showBanner.state = overlay.showsBanner ? .on : .off
         resetBanners.isEnabled = overlay.canResetBanners(timer: clock)
         showInScreenSharing.state = overlay.showsInScreenSharing ? .on : .off
         meetingItem.state = deferBreaksDuringMeetings ? .on : .off
+        ignoredAppsItem.isEnabled = deferBreaksDuringMeetings
         login.refresh()
         for setting in breakSounds { setting.item.state = defaults.bool(forKey: setting.key) ? .on : .off }
         longBreaks.state = clock.longBreaksEnabled ? .on : .off
@@ -183,6 +205,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         breakFrequency.title = "Long break after \(shortBreakCountLabel(clock.shortBreaksBeforeLongBreak))…"
         for item in [longBreakLength, breakFrequency] { item.isEnabled = clock.longBreaksEnabled }
+    }
+
+    /// Lists the apps using the microphone when the submenu opens, since there's no need to track them otherwise.
+    private func updateIgnoredAppsMenu() {
+        let ignored = ignoredApps.map { RecordingApp(id: $0.key, name: $0.value) }
+        let sections = IgnoredAppsSections(recording: MicrophoneMonitor.recordingApps(), ignored: ignored)
+        ignoredAppsMenu.removeAllItems()
+        if !sections.recording.isEmpty {
+            ignoredAppsMenu.addItem(.sectionHeader(title: "Using the Microphone"))
+            for app in sections.recording { ignoredAppsMenu.addItem(ignoredAppItem(app, ignored: false)) }
+        }
+        if !sections.ignored.isEmpty {
+            if !sections.recording.isEmpty { ignoredAppsMenu.addItem(.separator()) }
+            ignoredAppsMenu.addItem(.sectionHeader(title: "Ignored"))
+            for app in sections.ignored { ignoredAppsMenu.addItem(ignoredAppItem(app, ignored: true)) }
+        }
+        if ignoredAppsMenu.items.isEmpty {
+            let empty = ignoredAppsMenu.addItem(withTitle: "No apps are using the microphone", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+        }
+    }
+
+    private func ignoredAppItem(_ app: RecordingApp, ignored: Bool) -> NSMenuItem {
+        let item = NSMenuItem(title: app.name, action: #selector(toggleIgnoredApp), keyEquivalent: "")
+        item.target = self
+        item.representedObject = app
+        item.state = ignored ? .on : .off
+        // An app that isn't installed, or a daemon without an app, gets the generic program icon.
+        let path = app.id.hasPrefix("/") ? app.id : NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.id)?.path
+        let icon = path.map(NSWorkspace.shared.icon(forFile:)) ?? NSWorkspace.shared.icon(for: .unixExecutable)
+        icon.size = NSSize(width: 16, height: 16)
+        item.image = icon
+        // macOS 27 hides menu item images by default, but here they help tell apps apart.
+        item.preferredImageVisibility = .visible
+        return item
+    }
+
+    @objc private func toggleIgnoredApp(_ sender: NSMenuItem) {
+        guard let app = sender.representedObject as? RecordingApp else { return }
+        ignoredApps[app.id] = sender.state == .off ? app.name : nil
+        tick()
     }
 
     /// A click can't reach the menu bar behind the lock screen or a screen saver, so it clears a dropped unlock or `didstop`.
@@ -248,8 +311,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func tick() {
-        let state = activity.sample(detectMeetings: deferBreaksDuringMeetings)
-        let transition = clock.tick(at: now, activity: state)
+        update(fresh: false)
+    }
+
+    /// Ticks with a fresh meeting check if `fresh` is set or the tick could start a break.
+    private func update(fresh: Bool) {
+        // Use one timestamp, so the tick that starts a break is the one whose sample was fresh.
+        let time = now
+        let state = activity.sample(detectMeetings: deferBreaksDuringMeetings, fresh: fresh || clock.isBreakDue(at: time))
+        let transition = clock.tick(at: time, activity: state)
         render()
         if let setting = breakSounds.first(where: { $0.transition == transition }), defaults.bool(forKey: setting.key) {
             NSSound(named: setting.sound)?.play()
@@ -261,7 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let resting = clock.phase == .resting
         let reason: String? = switch clock.pauseReason {
         case .manual: "Reminders paused"
-        case .meeting: "\(clock.breakKind.title) due · Mic or camera in use"
+        case .meeting: "\(clock.breakKind.title) due · \(meetingDescription)"
         case .unavailable: "Paused · Mac is away"
         case nil: nil
         }
@@ -313,6 +383,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         timer = next
     }
 
+    private var meetingDescription: String {
+        switch activity.meetingCause {
+        case .camera: "Camera in use"
+        case .microphone(let app?): "\(app.name) is using the mic"
+        case .microphone(nil), nil: "Mic in use"
+        }
+    }
+
     private var breakActionSubtitle: String? {
         guard clock.longBreaksEnabled else { return nil }
         let remaining = clock.shortBreaksRemaining
@@ -331,11 +409,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func startBreak(_ sender: NSMenuItem) {
-        clock.tick(at: now, activity: activity.sample(detectMeetings: deferBreaksDuringMeetings))
+        let time = now
+        clock.tick(at: time, activity: activity.sample(detectMeetings: deferBreaksDuringMeetings, fresh: true))
         if sender === takeLongBreak {
-            clock.startLongBreak(at: now)
+            clock.startLongBreak(at: time)
         } else {
-            clock.startBreak(at: now)
+            clock.startBreak(at: time)
         }
         render()
     }

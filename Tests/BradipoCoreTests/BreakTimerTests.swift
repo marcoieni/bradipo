@@ -509,3 +509,52 @@ func unavailableMacWaitsForWakeBeforeSchedulingMoreTicks(manuallyPaused: Bool) {
     #expect(timer.tick(at: 100, activity: .active) == nil)
     #expect(timer.remainingSeconds == 20)
 }
+
+// The app checks for meetings more carefully on the ticks for which this is true.
+@Test func breakIsDueAtTheEndOfTheWorkInterval() {
+    var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
+    timer.tick(at: 10, activity: .active)
+    #expect(!timer.isBreakDue(at: 19.5))
+    #expect(timer.isBreakDue(at: 20))
+    timer.tick(at: 20, activity: .active)
+    #expect(!timer.isBreakDue(at: 21))
+}
+
+@Test func breakHeldByAMeetingStaysDue() {
+    var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
+    timer.tick(at: 20, activity: .meeting)
+    // Every later tick can start the held break.
+    #expect(timer.isBreakDue(at: 20.25))
+    #expect(timer.isBreakDue(at: 3600))
+}
+
+@Test func meetingBeforeTheDeadlineDoesNotDelayTheDueBreak() {
+    var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
+    // A call that began mid-interval doesn't pause the countdown, so the break is due on time.
+    // The tick at the deadline then needs a fresh meeting check, not this earlier reading.
+    timer.tick(at: 10, activity: .meeting)
+    #expect(!timer.isBreakDue(at: 19.5))
+    #expect(timer.isBreakDue(at: 20))
+}
+
+@Test func pausedRemindersHaveNoBreakDue() {
+    var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
+    timer.tick(at: 10, activity: .active)
+    timer.setManuallyPaused(true, at: 10)
+    // The deadline passes on the clock, but a paused countdown can't start a break.
+    #expect(!timer.isBreakDue(at: 30))
+    // Resuming keeps the 10 seconds that were left.
+    timer.setManuallyPaused(false, at: 30)
+    #expect(!timer.isBreakDue(at: 39))
+    #expect(timer.isBreakDue(at: 40))
+}
+
+@Test func firstTickAfterTimeAwayHasNoBreakDue() {
+    var timer = BreakTimer(workDuration: 20, breakDuration: 5, now: 0)
+    timer.tick(at: 5, activity: .unavailable)
+    // The old deadline has passed, but returning restarts the interval instead of starting a break.
+    #expect(!timer.isBreakDue(at: 100))
+    timer.tick(at: 100, activity: .active)
+    #expect(!timer.isBreakDue(at: 119))
+    #expect(timer.isBreakDue(at: 120))
+}

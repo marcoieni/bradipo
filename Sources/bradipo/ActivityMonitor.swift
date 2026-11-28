@@ -5,7 +5,19 @@ import CoreGraphics
 
 @MainActor
 final class ActivityMonitor {
+    enum MeetingCause {
+        case camera
+        /// Nil if the recording process has neither a readable path nor a bundle ID, for example because it ended.
+        case microphone(RecordingApp?)
+    }
+
     var onChange: (() -> Void)?
+    /// What made the last sample a meeting.
+    private(set) var meetingCause: MeetingCause?
+    /// Identifiers of apps whose microphone use isn't a meeting. Their camera use still is.
+    var ignoredMicrophoneApps: Set<String> = [] {
+        didSet { microphone?.ignoredApps = ignoredMicrophoneApps }
+    }
 
     private lazy var cameras = AVCaptureDevice.DiscoverySession(
         deviceTypes: [.builtInWideAngleCamera, .external, .continuityCamera, .deskViewCamera],
@@ -46,20 +58,26 @@ final class ActivityMonitor {
         for observer in observers { observer.center.removeObserver(observer.token) }
     }
 
-    func sample(detectMeetings: Bool) -> ActivityState {
+    /// Pass `fresh` when the result decides whether a break starts, or is about to show in the menu.
+    func sample(detectMeetings: Bool, fresh: Bool) -> ActivityState {
         if detectMeetings && microphone == nil {
-            microphone = MicrophoneMonitor { [weak self] in self?.onChange?() }
+            microphone = MicrophoneMonitor(ignoredApps: ignoredMicrophoneApps) { [weak self] in self?.onChange?() }
         } else if !detectMeetings {
             microphone = nil
         }
+        meetingCause = nil
         if systemAsleep || screensAsleep || sessionInactive || screenLocked || screenSaverRunning {
             return .unavailable
         }
+        guard let microphone else { return .active }
         // The camera check is cheap, so let it skip the Core Audio reads behind the microphone check.
-        if let microphone, cameras.devices.contains(where: \.isInUseByAnotherApplication) || microphone.isInUse {
-            return .meeting
+        // There's no public way to learn which app uses the camera, so ignoring an app can't cover it.
+        if cameras.devices.contains(where: \.isInUseByAnotherApplication) {
+            meetingCause = .camera
+        } else if let recorder = microphone.recorder(fresh: fresh) {
+            meetingCause = .microphone(recorder.app)
         }
-        return .active
+        return meetingCause == nil ? .active : .meeting
     }
 
     private static func currentSession() -> (onConsole: Bool?, screenLocked: Bool) {
