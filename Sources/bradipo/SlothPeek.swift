@@ -60,9 +60,6 @@ struct SlothPeek {
     }
 
     private func setTitleOpacity(_ opacity: CGFloat) {
-        let text = NSMutableAttributedString(attributedString: title)
-        text.addAttribute(.foregroundColor, value: NSColor.labelColor.withAlphaComponent(opacity),
-                          range: NSRange(location: 0, length: text.length))
-        button.attributedTitle = text
+        button.attributedTitle = title.withForegroundColor(.labelColor.withAlphaComponent(opacity))
     }
 }
