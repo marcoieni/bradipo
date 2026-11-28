@@ -10,6 +10,8 @@ final class BreakOverlay: NSObject {
     private var banners: [ReminderPanel] = []
     private var isPreviewingGlow = false
     @AppStorage("showBreakBanner") private(set) var showsBanner = true
+    /// Off until checked, so people watching a screen share or recording don't see the glow or the banner.
+    @AppStorage("showBreaksInScreenSharing") private(set) var showsInScreenSharing = false
     let intensity = BorderGlowIntensity()
     private var countdown: BreakCountdown?
     private let onEndBreak: () -> Void
@@ -51,6 +53,13 @@ final class BreakOverlay: NSObject {
         showsBanner.toggle()
         updatePanels()
     }
+
+    @objc func toggleScreenSharing() {
+        showsInScreenSharing.toggle()
+        for panel in glows + banners { panel.sharingType = sharingType }
+    }
+
+    private var sharingType: NSWindow.SharingType { showsInScreenSharing ? .readOnly : .none }
 
     func setGlowIntensity(_ value: Double) {
         guard value != intensity.value else { return }
@@ -122,6 +131,7 @@ final class BreakOverlay: NSObject {
                 banners.contains { $0.windowNumber == number.intValue }
         }
         for panel in added {
+            panel.sharingType = sharingType
             panel.alphaValue = animated ? 0 : 1
             if let anchor, glows.contains(panel) {
                 panel.order(.below, relativeTo: anchor.intValue)
